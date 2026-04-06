@@ -1,0 +1,9 @@
+{
+  "name": "saynote",
+  "private": true,
+  "workspaces": ["frontend", "backend", "shared"],
+  "scripts": {
+    "typecheck": "npm run -w frontend typecheck && npm run -w backend typecheck",
+    "lint": "npm run -w frontend lint"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@saynote/backend",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "worker": "node dist/worker.js"
+  },
+  "dependencies": {
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.8",
+    "typescript": "^5.8.2"
+  }
+}
