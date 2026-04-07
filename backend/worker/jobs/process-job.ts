@@ -1,7 +1,7 @@
 import type { PoolClient, QueryResult } from 'pg';
 import { getProvider } from '../providers/registry';
 import { normalizeCategoryPath } from '../categories/resolve-category-path';
-import { decryptSecret } from '../security/encryption';
+import { decryptSecretForWorker } from '../security/decrypt-for-worker';
 import { loadJobDependencies, markJobFailed, type ProcessingJobRow } from '../db';
 import { isProviderError, safeErrorMessage, type ProviderFailureKind } from '../providers/errors';
 
@@ -95,7 +95,7 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
       }
 
       try {
-        const apiKey = await decryptSecret(credential.encrypted_api_key);
+        const apiKey = await decryptSecretForWorker(credential.encrypted_api_key);
         const adapter = getProvider(attempt.provider);
 
         const transcription = await adapter.transcribe({

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireUserId } from '@/lib/auth/session';
 import { upsertCredential } from '@/lib/api/supabase-server';
+import { logSanitizedApiError } from '@/lib/api/logging';
 
 const schema = z.object({
   provider: z.string().min(1),
@@ -19,7 +20,10 @@ export async function PUT(request: Request) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    console.error('AI credential update failed', error);
+    logSanitizedApiError('AI credential update failed', error, {
+      route: '/api/settings/ai-credentials',
+      method: 'PUT'
+    });
     return NextResponse.json({ error: 'Invalid credential payload' }, { status: 400 });
   }
 }

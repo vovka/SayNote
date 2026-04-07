@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUserId } from '@/lib/auth/session';
 import { getJobForUser } from '@/lib/api/supabase-server';
+import { logSanitizedApiError } from '@/lib/api/logging';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -21,7 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    console.error('Job lookup failed', error);
+    logSanitizedApiError('Job lookup failed', error, { route: '/api/jobs/[id]' });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

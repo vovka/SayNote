@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireUserId } from '@/lib/auth/session';
 import { getAIConfig, upsertAIConfig } from '@/lib/api/supabase-server';
+import { logSanitizedApiError } from '@/lib/api/logging';
 
 const schema = z.object({
   primaryProvider: z.string().min(1),
@@ -22,7 +23,7 @@ export async function PUT(request: Request) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    console.error('AI config update failed', error);
+    logSanitizedApiError('AI config update failed', error, { route: '/api/settings/ai-config', method: 'PUT' });
     return NextResponse.json({ error: 'Invalid config payload' }, { status: 400 });
   }
 }
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    console.error('AI config fetch failed', error);
+    logSanitizedApiError('AI config fetch failed', error, { route: '/api/settings/ai-config', method: 'GET' });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

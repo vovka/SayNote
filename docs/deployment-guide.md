@@ -48,6 +48,11 @@ Configure these in Vercel and worker runtime:
 - `R2_BUCKET`
 - `ENCRYPTION_MASTER_KEY`
 
+`ENCRYPTION_MASTER_KEY` requirements:
+- Required in every non-development runtime (API + worker). Startup fails fast when missing.
+- Must never be set to insecure placeholders such as `dev-only-master-key-change-me`.
+- Rotate at regular intervals and after any suspected secret exposure.
+
 ## Step 4: Deploy Frontend + API on Vercel
 
 1. Import repository into Vercel.
@@ -98,3 +103,27 @@ Replace in-memory implementations with:
 - R2 objects are deleted after successful processing
 - Plaintext API keys are never returned by API
 
+## Key Rotation + Credential Re-encryption Runbook
+
+When rotating `ENCRYPTION_MASTER_KEY`, existing encrypted credentials must be re-encrypted.
+
+1. **Prepare a maintenance window**
+   - Pause worker processing so no jobs decrypt while rotation is in-flight.
+   - Keep API writes for credential updates disabled or queued.
+2. **Stage new key**
+   - Generate a new high-entropy `ENCRYPTION_MASTER_KEY`.
+   - Store it in secret manager as the next key version.
+3. **Run re-encryption migration**
+   - For each row in `user_ai_credentials`:
+     - Decrypt `encrypted_api_key` with the old key.
+     - Encrypt plaintext with the new key.
+     - Update `encrypted_api_key` in one transaction batch.
+   - Do not log plaintext, ciphertext, or raw exception payloads during migration.
+4. **Switch runtime secrets**
+   - Update API and worker environments to the new `ENCRYPTION_MASTER_KEY`.
+   - Restart services and verify startup succeeds (it should fail fast on insecure defaults).
+5. **Post-rotation validation**
+   - Save a test credential through Settings API and confirm metadata-only response.
+   - Run a worker job end-to-end to confirm provider calls decrypt successfully.
+6. **Retire old key**
+   - Remove old key material from runtime environments and secret manager active set.

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireUserId } from '@/lib/auth/session';
 import { createUploadJob, getUploadJobByIdempotencyKey } from '@/lib/api/supabase-server';
 import { buildTemporaryAudioStorageKey, putTemporaryAudio } from '@/../backend/worker/storage/r2';
+import { logSanitizedApiError } from '@/lib/api/logging';
 
 const ALLOWED_MIME_TYPES = new Set(['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav']);
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -89,7 +90,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    console.error('Upload route failed', error);
+    logSanitizedApiError('Upload route failed', error, { route: '/api/audio/upload' });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
