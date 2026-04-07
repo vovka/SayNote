@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUserId } from '@/lib/auth/session';
 import { getJobForUser } from '@/lib/api/supabase-server';
+import { scrubSensitiveFields } from '@/lib/api/safe-logging';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -9,7 +10,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const job = await getJobForUser(id, userId);
 
     if (!job) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Not found', errorCode: 'JOB_NOT_FOUND' }, { status: 404 });
     }
 
     return NextResponse.json({
@@ -19,9 +20,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     });
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized', errorCode: 'UNAUTHORIZED' }, { status: 401 });
     }
-    console.error('Job lookup failed', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('[job_lookup_failed]', JSON.stringify({ errorCode: 'JOB_LOOKUP_FAILED', safeDetails: scrubSensitiveFields(error) }));
+    return NextResponse.json({ error: 'Internal server error', errorCode: 'JOB_LOOKUP_FAILED' }, { status: 500 });
   }
 }

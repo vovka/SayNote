@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUserId } from '@/lib/auth/session';
 import { createUploadJob } from '@/lib/api/supabase-server';
+import { scrubSensitiveFields } from '@/lib/api/safe-logging';
 import {
   buildIdempotentTemporaryAudioStorageKey,
   deleteTemporaryAudio,
@@ -44,7 +45,7 @@ function toAcceptedResponse(job: {
 }
 
 function invalidPayload(message: string, status = 400) {
-  return NextResponse.json({ error: message, code: 'INVALID_PAYLOAD' }, { status });
+  return NextResponse.json({ error: message, errorCode: 'INVALID_PAYLOAD' }, { status });
 }
 
 export async function POST(request: Request) {
@@ -90,23 +91,36 @@ export async function POST(request: Request) {
 
       const response = toAcceptedResponse(job);
       if (job.wasDuplicate) {
-        return NextResponse.json({ ...response, code: 'IDEMPOTENT_REPLAY' });
+        return NextResponse.json({ ...response, errorCode: 'IDEMPOTENT_REPLAY' });
       }
 
-      return NextResponse.json({ ...response, code: 'UPLOAD_ACCEPTED' });
+      return NextResponse.json({ ...response, errorCode: 'UPLOAD_ACCEPTED' });
     } catch (dbError) {
       try {
         await deleteTemporaryAudio(storageKey);
       } catch (cleanupError) {
-        console.warn('Failed to rollback uploaded audio object after DB failure', cleanupError);
+        console.warn(
+          '[audio_upload_cleanup_failed]',
+          JSON.stringify({
+            errorCode: 'AUDIO_UPLOAD_CLEANUP_FAILED',
+            safeDetails: scrubSensitiveFields(cleanupError)
+          })
+        );
       }
       throw dbError;
     }
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized', errorCode: 'UNAUTHORIZED' }, { status: 401 });
     }
-    console.error('Upload route failed', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    if (error instanceof TypeError) {
+      console.error(
+        '[audio_upload_parse_failed]',
+        JSON.stringify({ errorCode: 'INVALID_UPLOAD_PAYLOAD', safeDetails: scrubSensitiveFields(error) })
+      );
+      return NextResponse.json({ error: 'Invalid upload payload', errorCode: 'INVALID_UPLOAD_PAYLOAD' }, { status: 400 });
+    }
+    console.error('[audio_upload_failed]', JSON.stringify({ errorCode: 'UPLOAD_FAILED', safeDetails: scrubSensitiveFields(error) }));
+    return NextResponse.json({ error: 'Internal server error', errorCode: 'UPLOAD_FAILED' }, { status: 500 });
   }
 }
