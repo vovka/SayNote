@@ -1,8 +1,22 @@
 import { db } from '@/lib/db/indexeddb';
-import { uploadAudio } from '@/lib/api/client';
+import { getJob, uploadAudio } from '@/lib/api/client';
 
-const RETRY_BASE_MS = 1_000;
-const RETRY_CAP_MS = 60_000;
+const UPLOAD_RETRY_POLICY = {
+  maxRetries: 8,
+  baseMs: 1_000,
+  capMs: 60_000
+} as const;
+
+const PROCESSING_RETRY_POLICY = {
+  maxRetries: 40,
+  baseMs: 5_000,
+  capMs: 60_000
+} as const;
+
+const CLEANUP_POLICY = {
+  processedTtlMs: 24 * 60 * 60 * 1_000,
+  terminalFailureTtlMs: 7 * 24 * 60 * 60 * 1_000
+} as const;
 
 export async function queueRecording(userId: string, payload: {
   audioBlob: Blob;
@@ -18,8 +32,10 @@ export async function queueRecording(userId: string, payload: {
     userId,
     ...payload,
     status: 'queued_upload',
-    retryCount: 0,
-    uploadIdempotencyKey: idempotencyKey
+    uploadRetryCount: 0,
+    processingRetryCount: 0,
+    uploadIdempotencyKey: idempotencyKey,
+    statusUpdatedAt: new Date().toISOString()
   });
 
   if (navigator.onLine) {
@@ -48,16 +64,29 @@ export function startSyncLoop() {
 
 async function runSync() {
   if (!navigator.onLine) return;
+  await cleanupSyncedRecords();
 
   const now = new Date().toISOString();
-  const queued = await db.recordings
+  const queuedUploads = await db.recordings
     .where('status')
     .anyOf('queued_upload', 'failed_retryable')
     .toArray();
 
-  for (const item of queued) {
-    if (item.nextRetryAt && item.nextRetryAt > now) continue;
+  for (const item of queuedUploads) {
+    if (item.status === 'failed_retryable' && item.failedStage !== 'upload') continue;
+    if (item.nextUploadRetryAt && item.nextUploadRetryAt > now) continue;
     await uploadOne(item.id);
+  }
+
+  const processingQueue = await db.recordings
+    .where('status')
+    .anyOf('uploaded_waiting_processing', 'failed_retryable')
+    .toArray();
+  for (const item of processingQueue) {
+    if (item.status === 'failed_retryable' && item.failedStage !== 'processing') continue;
+    if (!item.serverJobId) continue;
+    if (item.nextProcessingRetryAt && item.nextProcessingRetryAt > now) continue;
+    await pollJobStatus(item.id);
   }
 }
 
@@ -65,7 +94,7 @@ async function uploadOne(id: string) {
   const item = await db.recordings.get(id);
   if (!item || !item.audioBlob) return;
 
-  await db.recordings.update(id, { status: 'uploading', lastError: undefined });
+  await db.recordings.update(id, { status: 'uploading', failedStage: undefined, lastError: undefined, statusUpdatedAt: new Date().toISOString() });
 
   const form = new FormData();
   form.append('audio', item.audioBlob, `${item.id}.webm`);
@@ -81,22 +110,114 @@ async function uploadOne(id: string) {
       status: 'uploaded_waiting_processing',
       audioBlob: undefined,
       serverJobId: result.job_id,
-      lastError: undefined
+      lastError: undefined,
+      nextUploadRetryAt: undefined,
+      processingRetryCount: 0,
+      nextProcessingRetryAt: new Date().toISOString(),
+      failedStage: undefined,
+      statusUpdatedAt: new Date().toISOString(),
+      uploadCompletedAt: new Date().toISOString()
     });
   } catch (error) {
-    const retryCount = item.retryCount + 1;
-    const delay = computeBackoffMs(retryCount);
+    const retryCount = (item.uploadRetryCount ?? 0) + 1;
+    const delay = computeBackoffMs(retryCount, UPLOAD_RETRY_POLICY.baseMs, UPLOAD_RETRY_POLICY.capMs);
     await db.recordings.update(id, {
-      status: retryCount >= 8 ? 'failed_terminal' : 'failed_retryable',
-      retryCount,
+      status: retryCount >= UPLOAD_RETRY_POLICY.maxRetries ? 'failed_terminal' : 'failed_retryable',
+      uploadRetryCount: retryCount,
+      failedStage: 'upload',
       lastError: error instanceof Error ? error.message : 'Unknown error',
-      nextRetryAt: new Date(Date.now() + delay).toISOString()
+      nextUploadRetryAt: new Date(Date.now() + delay).toISOString(),
+      statusUpdatedAt: new Date().toISOString()
     });
   }
 }
 
-function computeBackoffMs(retryCount: number) {
-  const exp = Math.min(RETRY_CAP_MS, RETRY_BASE_MS * Math.pow(2, retryCount));
+async function pollJobStatus(id: string) {
+  const item = await db.recordings.get(id);
+  if (!item?.serverJobId) return;
+
+  try {
+    const result = await getJob(item.serverJobId);
+    const now = new Date().toISOString();
+    if (result.status === 'completed') {
+      await db.recordings.update(id, {
+        status: 'processed',
+        processedAt: now,
+        statusUpdatedAt: now,
+        nextProcessingRetryAt: undefined,
+        failedStage: undefined,
+        lastError: undefined
+      });
+      return;
+    }
+
+    if (result.status === 'failed_terminal') {
+      await db.recordings.update(id, {
+        status: 'failed_terminal',
+        failedStage: 'processing',
+        lastError: result.error_code ?? 'Processing failed terminally',
+        statusUpdatedAt: now,
+        nextProcessingRetryAt: undefined
+      });
+      return;
+    }
+
+    if (result.status === 'failed_retryable') {
+      const retryCount = (item.processingRetryCount ?? 0) + 1;
+      const delay = computeBackoffMs(retryCount, PROCESSING_RETRY_POLICY.baseMs, PROCESSING_RETRY_POLICY.capMs);
+      await db.recordings.update(id, {
+        status: retryCount >= PROCESSING_RETRY_POLICY.maxRetries ? 'failed_terminal' : 'failed_retryable',
+        processingRetryCount: retryCount,
+        failedStage: 'processing',
+        lastError: result.error_code ?? 'Processing failed; will retry',
+        nextProcessingRetryAt: new Date(Date.now() + delay).toISOString(),
+        statusUpdatedAt: now
+      });
+      return;
+    }
+
+    const retryCount = (item.processingRetryCount ?? 0) + 1;
+    const delay = computeBackoffMs(retryCount, PROCESSING_RETRY_POLICY.baseMs, PROCESSING_RETRY_POLICY.capMs);
+    await db.recordings.update(id, {
+      processingRetryCount: retryCount,
+      nextProcessingRetryAt: new Date(Date.now() + delay).toISOString(),
+      statusUpdatedAt: now
+    });
+  } catch (error) {
+    const retryCount = (item.processingRetryCount ?? 0) + 1;
+    const delay = computeBackoffMs(retryCount, PROCESSING_RETRY_POLICY.baseMs, PROCESSING_RETRY_POLICY.capMs);
+    await db.recordings.update(id, {
+      status: retryCount >= PROCESSING_RETRY_POLICY.maxRetries ? 'failed_terminal' : item.status,
+      processingRetryCount: retryCount,
+      failedStage: 'processing',
+      lastError: error instanceof Error ? error.message : 'Processing status lookup failed',
+      nextProcessingRetryAt: new Date(Date.now() + delay).toISOString(),
+      statusUpdatedAt: new Date().toISOString()
+    });
+  }
+}
+
+async function cleanupSyncedRecords() {
+  const now = Date.now();
+  const all = await db.recordings.toArray();
+  for (const item of all) {
+    if (item.audioBlob && (item.status === 'uploaded_waiting_processing' || item.status === 'processed')) {
+      await db.recordings.update(item.id, { audioBlob: undefined });
+    }
+
+    if (item.status === 'processed' && item.processedAt && now - Date.parse(item.processedAt) > CLEANUP_POLICY.processedTtlMs) {
+      await db.recordings.delete(item.id);
+      continue;
+    }
+
+    if (item.status === 'failed_terminal' && now - Date.parse(item.statusUpdatedAt) > CLEANUP_POLICY.terminalFailureTtlMs) {
+      await db.recordings.delete(item.id);
+    }
+  }
+}
+
+function computeBackoffMs(retryCount: number, baseMs: number, capMs: number) {
+  const exp = Math.min(capMs, baseMs * Math.pow(2, retryCount));
   const jitter = Math.floor(Math.random() * 400);
   return exp + jitter;
 }

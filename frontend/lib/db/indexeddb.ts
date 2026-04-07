@@ -8,11 +8,17 @@ export interface RecordingEntity {
   durationMs: number;
   createdAt: string;
   status: 'recorded_local' | 'queued_upload' | 'uploading' | 'uploaded_waiting_processing' | 'processed' | 'failed_retryable' | 'failed_terminal';
-  retryCount: number;
-  nextRetryAt?: string;
+  uploadRetryCount: number;
+  processingRetryCount: number;
+  nextUploadRetryAt?: string;
+  nextProcessingRetryAt?: string;
+  failedStage?: 'upload' | 'processing';
   uploadIdempotencyKey: string;
   serverJobId?: string;
   lastError?: string;
+  statusUpdatedAt: string;
+  uploadCompletedAt?: string;
+  processedAt?: string;
 }
 
 class VoiceNotesDB extends Dexie {
@@ -22,6 +28,9 @@ class VoiceNotesDB extends Dexie {
     super('voiceNotesDB');
     this.version(1).stores({
       recordings: 'id, userId, status, nextRetryAt, createdAt, uploadIdempotencyKey'
+    });
+    this.version(2).stores({
+      recordings: 'id, userId, status, nextUploadRetryAt, nextProcessingRetryAt, createdAt, statusUpdatedAt, uploadIdempotencyKey, serverJobId'
     });
   }
 }
