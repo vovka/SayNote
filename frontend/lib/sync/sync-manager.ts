@@ -1,5 +1,6 @@
 import { db } from '@/lib/db/indexeddb';
 import { getJob, uploadAudio } from '@/lib/api/client';
+import { pickProcessingQueue, pickUploadQueue } from '@/lib/sync/sync-core';
 
 const UPLOAD_RETRY_POLICY = {
   maxRetries: 8,
@@ -96,9 +97,7 @@ async function runSync() {
     .anyOf('queued_upload', 'failed_retryable')
     .toArray();
 
-  for (const item of queuedUploads) {
-    if (item.status === 'failed_retryable' && item.failedStage !== 'upload') continue;
-    if (item.nextUploadRetryAt && item.nextUploadRetryAt > now) continue;
+  for (const item of pickUploadQueue(queuedUploads, now)) {
     await uploadOne(item.id);
   }
 
@@ -106,10 +105,7 @@ async function runSync() {
     .where('status')
     .anyOf('uploaded_waiting_processing', 'failed_retryable')
     .toArray();
-  for (const item of processingQueue) {
-    if (item.status === 'failed_retryable' && item.failedStage !== 'processing') continue;
-    if (!item.serverJobId) continue;
-    if (item.nextProcessingRetryAt && item.nextProcessingRetryAt > now) continue;
+  for (const item of pickProcessingQueue(processingQueue, now)) {
     await pollJobStatus(item.id);
   }
 }

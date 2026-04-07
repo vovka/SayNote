@@ -1,0 +1,33 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { pickProcessingQueue, pickUploadQueue } from './sync-core.ts';
+
+test('pickUploadQueue supports offline->reconnect upload convergence selection', () => {
+  const now = '2026-04-07T12:00:00.000Z';
+  const result = pickUploadQueue(
+    [
+      { id: 'queued', status: 'queued_upload' },
+      { id: 'retry-ready', status: 'failed_retryable', failedStage: 'upload', nextUploadRetryAt: '2026-04-07T11:59:00.000Z' },
+      { id: 'retry-later', status: 'failed_retryable', failedStage: 'upload', nextUploadRetryAt: '2026-04-07T12:30:00.000Z' },
+      { id: 'wrong-stage', status: 'failed_retryable', failedStage: 'processing' }
+    ],
+    now
+  );
+
+  assert.deepEqual(result.map((item) => item.id), ['queued', 'retry-ready']);
+});
+
+test('pickProcessingQueue selects pollable items after reconnect', () => {
+  const now = '2026-04-07T12:00:00.000Z';
+  const result = pickProcessingQueue(
+    [
+      { id: 'uploaded-ready', status: 'uploaded_waiting_processing', serverJobId: 'job-1', nextProcessingRetryAt: '2026-04-07T11:59:00.000Z' },
+      { id: 'uploaded-no-job', status: 'uploaded_waiting_processing' },
+      { id: 'processing-retry', status: 'failed_retryable', failedStage: 'processing', serverJobId: 'job-2', nextProcessingRetryAt: '2026-04-07T11:59:30.000Z' },
+      { id: 'processing-later', status: 'failed_retryable', failedStage: 'processing', serverJobId: 'job-3', nextProcessingRetryAt: '2026-04-07T12:59:30.000Z' }
+    ],
+    now
+  );
+
+  assert.deepEqual(result.map((item) => item.id), ['uploaded-ready', 'processing-retry']);
+});

@@ -7,8 +7,7 @@ import {
   putTemporaryAudio
 } from '@/../backend/worker/storage/r2';
 
-const ALLOWED_MIME_TYPES = new Set(['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav']);
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+import { validateUploadInvariants } from '@/lib/api/upload-invariants';
 
 function parseDurationMs(raw: FormDataEntryValue | null) {
   const parsed = Number(raw ?? 0);
@@ -66,12 +65,9 @@ export async function POST(request: Request) {
     }
 
     const mimeType = uploadedAudio.type || 'application/octet-stream';
-    if (!ALLOWED_MIME_TYPES.has(mimeType)) {
-      return invalidPayload('Unsupported audio type', 415);
-    }
-
-    if (uploadedAudio.size > MAX_UPLOAD_BYTES) {
-      return invalidPayload('Audio file too large', 413);
+    const invariantResult = validateUploadInvariants({ mimeType, sizeBytes: uploadedAudio.size });
+    if (!invariantResult.ok) {
+      return invalidPayload(invariantResult.message, invariantResult.status);
     }
 
     const audioBytes = new Uint8Array(await uploadedAudio.arrayBuffer());

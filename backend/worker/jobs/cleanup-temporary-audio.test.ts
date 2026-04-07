@@ -31,3 +31,23 @@ test('cleanupTemporaryAudioAfterCompletion logs and continues when delete fails'
     }
   ]);
 });
+
+
+test('cleanupTemporaryAudioAfterCompletion deletes audio on successful completion', async () => {
+  const deletedKeys: string[] = [];
+
+  await cleanupTemporaryAudioAfterCompletion({
+    jobId: 'job_2',
+    userId: 'user_2',
+    audioStorageKey: 'audio/user_2/recording.webm',
+    deleteAudio: async (key) => {
+      deletedKeys.push(key);
+      return { deleted: true };
+    },
+    logFailure: () => {
+      throw new Error('should not log failure on success path');
+    }
+  });
+
+  assert.deepEqual(deletedKeys, ['audio/user_2/recording.webm']);
+});

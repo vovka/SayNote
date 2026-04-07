@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { encryptSecret } from '@/../backend/worker/security/encryption';
 import { isSupportedProvider, type ValidatedAIProviderConfig } from '@/../shared/types/model-policy';
+import { createIdempotentUploadJob } from './upload-invariants';
 
 type JobStatus = 'uploaded' | 'processing' | 'completed' | 'failed_retryable' | 'failed_terminal';
 
@@ -129,23 +130,23 @@ export async function createUploadJob(input: {
     audio_duration_ms: input.durationMs
   };
 
-  const { data, error } = await supabase
-    .from('processing_jobs')
-    .insert(payload)
-    .select('id,status,client_recording_id,idempotency_key,audio_storage_key,audio_mime_type,audio_duration_ms,created_at,updated_at')
-    .single();
+  return createIdempotentUploadJob({
+    insert: async () => {
+      const { data, error } = await supabase
+        .from('processing_jobs')
+        .insert(payload)
+        .select('id,status,client_recording_id,idempotency_key,audio_storage_key,audio_mime_type,audio_duration_ms,created_at,updated_at')
+        .single();
 
-  if (error) {
-    if (error.code === '23505') {
-      const existing = await getUploadJobByIdempotencyKey(input.userId, input.idempotencyKey);
-      if (existing) {
-        return { ...existing, wasDuplicate: true as const };
+      if (error) {
+        throw error;
       }
-    }
-    throw error;
-  }
 
-  return { ...mapUploadJob(data as Record<string, unknown>), wasDuplicate: false as const };
+      return mapUploadJob(data as Record<string, unknown>);
+    },
+    loadExisting: () => getUploadJobByIdempotencyKey(input.userId, input.idempotencyKey),
+    isDuplicateError: (error) => Boolean(error && typeof error === 'object' && 'code' in error && (error as { code: string }).code === '23505')
+  });
 }
 
 export async function getJobForUser(jobId: string, userId: string) {

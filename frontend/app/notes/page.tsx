@@ -6,6 +6,7 @@ import { AuthControls } from '@/components/auth-controls';
 import { getNotes } from '@/lib/api/client';
 import { db, type RecordingEntity } from '@/lib/db/indexeddb';
 import { SYNC_JOB_COMPLETED_EVENT } from '@/lib/sync/sync-manager';
+import { shouldRefreshNotesForProcessedTransition } from '@/lib/notes/refresh-policy';
 
 interface CategoryNode {
   id: string;
@@ -51,10 +52,7 @@ function NotesPageContent() {
         .toArray();
 
       const nextStatuses = new Map(items.map((item) => [item.id, item.status]));
-      const hadNewProcessedItem = items.some((item) => {
-        const previousStatus = previousStatusesRef.current.get(item.id);
-        return item.status === 'processed' && previousStatus !== 'processed';
-      });
+      const hadNewProcessedItem = shouldRefreshNotesForProcessedTransition(previousStatusesRef.current, items);
       previousStatusesRef.current = nextStatuses;
       setSyncItems(items);
 
