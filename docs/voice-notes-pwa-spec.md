@@ -105,7 +105,13 @@ A second page displays notes grouped by categories.
 - Categories displayed as nested tree sections
 - Notes grouped under their assigned category
 - Categories may contain child categories recursively
-- Notes within categories sorted by creation or processing time, newest first by default
+- Notes within categories sorted newest first by default
+
+#### Rendering Split (Implemented)
+- The categorized notes list contains **processed notes only**.
+- Local items that are pending upload, waiting for processing, or failed (retryable/terminal) appear in a separate **Sync status** section.
+- Sync status entries are ordered newest first by local recording `createdAt` with deterministic tie-break by recording ID.
+- Processed notes preserve category-path display in the tree (for example, `Work > Project A > Ideas`).
 
 #### Required Note Fields in UI
 - Note text

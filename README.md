@@ -16,7 +16,7 @@ This repository implements the Voice Notes PWA architecture from `docs/voice-not
 
 ### Frontend
 - Record screen with single large record button and status text
-- Notes page rendering nested category tree
+- Notes page rendering nested category tree for processed notes, plus a separate sync status section for local pending/failed items
 - Settings page for provider/model + API key submit
 - Local recording state machine in IndexedDB
 - Sync triggers: startup, focus, online event, periodic timer

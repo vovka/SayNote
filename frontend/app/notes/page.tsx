@@ -7,6 +7,8 @@ import { getNotes } from '@/lib/api/client';
 import { db, type RecordingEntity } from '@/lib/db/indexeddb';
 import { SYNC_JOB_COMPLETED_EVENT } from '@/lib/sync/sync-manager';
 import { shouldRefreshNotesForProcessedTransition } from '@/lib/notes/refresh-policy';
+import { buildSyncStatusItems, type SyncStatusItem } from '@/lib/notes/sync-visibility';
+import { sortCategoryTreeNewestFirst } from '@/lib/notes/tree-ordering';
 
 interface CategoryNode {
   id: string;
@@ -35,13 +37,13 @@ function CategoryTree({ node, path = [] }: { node: CategoryNode; path?: string[]
 
 function NotesPageContent() {
   const [trees, setTrees] = useState<CategoryNode[]>([]);
-  const [syncItems, setSyncItems] = useState<RecordingEntity[]>([]);
+  const [syncItems, setSyncItems] = useState<SyncStatusItem[]>([]);
   const previousStatusesRef = useRef<Map<string, RecordingEntity['status']>>(new Map());
 
   useEffect(() => {
     const refreshNotes = async () => {
       const nextTrees = await getNotes();
-      setTrees(nextTrees);
+      setTrees(sortCategoryTreeNewestFirst(nextTrees));
     };
 
     const refreshSyncItems = async () => {
@@ -54,7 +56,7 @@ function NotesPageContent() {
       const nextStatuses = new Map(items.map((item) => [item.id, item.status]));
       const hadNewProcessedItem = shouldRefreshNotesForProcessedTransition(previousStatusesRef.current, items);
       previousStatusesRef.current = nextStatuses;
-      setSyncItems(items);
+      setSyncItems(buildSyncStatusItems(items));
 
       if (hadNewProcessedItem) {
         await refreshNotes();
@@ -87,12 +89,12 @@ function NotesPageContent() {
       <h1>Notes</h1>
       <section>
         <h2>Sync status</h2>
-        <p><small>Failed uploads or processing attempts remain visible here until they succeed or expire.</small></p>
+        <p><small>Only local pending and failed sync items render here. Processed notes render in the categorized list below.</small></p>
         {syncItems.length === 0 ? <p>No local sync activity yet.</p> : (
           <ul>
             {syncItems.map((item) => (
               <li key={item.id} style={{ marginBottom: 10 }}>
-                <strong>{renderStatus(item)}</strong>
+                <strong>{item.label}</strong>
                 <div><small>Recorded: {new Date(item.createdAt).toLocaleString()}</small></div>
                 <div><small>Updated: {new Date(item.statusUpdatedAt).toLocaleString()}</small></div>
                 {item.nextUploadRetryAt ? <div><small>Next upload retry: {new Date(item.nextUploadRetryAt).toLocaleString()}</small></div> : null}
@@ -110,17 +112,7 @@ function NotesPageContent() {
   );
 }
 
-function renderStatus(item: RecordingEntity) {
-  if (item.status === 'uploaded_waiting_processing') return 'Pending processing';
-  if (item.status === 'failed_retryable' && item.failedStage === 'upload') return `Upload failed (retry ${item.uploadRetryCount})`;
-  if (item.status === 'failed_retryable' && item.failedStage === 'processing') return `Processing failed (retry ${item.processingRetryCount})`;
-  if (item.status === 'failed_terminal' && item.failedStage === 'upload') return 'Upload failed permanently';
-  if (item.status === 'failed_terminal' && item.failedStage === 'processing') return 'Processing failed permanently';
-  if (item.status === 'processed') return 'Processed';
-  if (item.status === 'uploading') return 'Uploading';
-  if (item.status === 'queued_upload') return 'Queued for upload';
-  return item.status;
-}
+
 
 export default function NotesPage() {
   return (
