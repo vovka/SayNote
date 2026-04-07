@@ -18,6 +18,18 @@ export type UploadJobRecord = {
   updatedAt: string;
 };
 
+export type CategoryRow = {
+  id: string;
+  parent_id: string | null;
+  name: string;
+};
+
+export type CategoryTreeNode = {
+  id: string;
+  name: string;
+  children: CategoryTreeNode[];
+};
+
 function getSupabase() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -41,6 +53,47 @@ function mapUploadJob(data: Record<string, unknown>): UploadJobRecord {
     createdAt: data.created_at as string,
     updatedAt: data.updated_at as string
   };
+}
+
+function sortCategories(categories: CategoryRow[]): CategoryRow[] {
+  return [...categories].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+}
+
+function buildCategoriesTree(categories: CategoryRow[]): CategoryTreeNode[] {
+  const byParent = new Map<string | undefined, CategoryTreeNode[]>();
+
+  for (const category of categories) {
+    const key = category.parent_id ?? undefined;
+    const siblingNodes = byParent.get(key) ?? [];
+    siblingNodes.push({ id: category.id, name: category.name, children: [] });
+    byParent.set(key, siblingNodes);
+  }
+
+  const build = (parentId?: string): CategoryTreeNode[] => {
+    const siblings = byParent.get(parentId) ?? [];
+    const sortedSiblings = [...siblings].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+
+    return sortedSiblings.map((node) => ({
+      ...node,
+      children: build(node.id)
+    }));
+  };
+
+  return build(undefined);
+}
+
+export async function getCategoriesForUser(userId: string) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.from('categories').select('id,parent_id,name').eq('user_id', userId);
+
+  if (error) throw error;
+
+  return sortCategories((data ?? []) as CategoryRow[]);
+}
+
+export async function getCategoriesTreeForUser(userId: string) {
+  const categories = await getCategoriesForUser(userId);
+  return buildCategoriesTree(categories);
 }
 
 export async function getUploadJobByIdempotencyKey(userId: string, idempotencyKey: string) {
@@ -188,8 +241,8 @@ export async function upsertCredential(userId: string, provider: string, apiKey:
 
 export async function getNotesTreeForUser(userId: string) {
   const supabase = getSupabase();
-  const [categoriesResult, notesResult] = await Promise.all([
-    supabase.from('categories').select('id,parent_id,name').eq('user_id', userId).order('name', { ascending: true }),
+  const [categories, notesResult] = await Promise.all([
+    getCategoriesForUser(userId),
     supabase
       .from('notes')
       .select('id,category_id,text,created_at')
@@ -198,19 +251,9 @@ export async function getNotesTreeForUser(userId: string) {
       .order('id', { ascending: true })
   ]);
 
-  if (categoriesResult.error) throw categoriesResult.error;
   if (notesResult.error) throw notesResult.error;
 
-  const categories = categoriesResult.data ?? [];
   const notes = notesResult.data ?? [];
-
-  const byParent = new Map<string | undefined, Array<{ id: string; name: string }>>();
-  for (const category of categories) {
-    const key = (category.parent_id as string | null) ?? undefined;
-    const arr = byParent.get(key) ?? [];
-    arr.push({ id: category.id as string, name: category.name as string });
-    byParent.set(key, arr);
-  }
 
   const notesByCategory = new Map<string, Array<{ id: string; text: string; createdAt: string }>>();
   for (const note of notes) {
@@ -223,17 +266,17 @@ export async function getNotesTreeForUser(userId: string) {
     notesByCategory.set(note.category_id as string, arr);
   }
 
-  function build(parentId?: string): unknown[] {
-    const siblings = (byParent.get(parentId) ?? []).sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
-    return siblings.map((category) => ({
+  const categoriesTree = buildCategoriesTree(categories);
+
+  const attachNotes = (nodes: CategoryTreeNode[]): unknown[] =>
+    nodes.map((category) => ({
       id: category.id,
       name: category.name,
       notes: (notesByCategory.get(category.id) ?? []).sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || a.id.localeCompare(b.id)
       ),
-      children: build(category.id)
+      children: attachNotes(category.children)
     }));
-  }
 
-  return build(undefined);
+  return attachNotes(categoriesTree);
 }
