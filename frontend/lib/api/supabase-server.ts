@@ -4,6 +4,8 @@ import { encryptSecret } from '@/../backend/worker/security/encryption';
 
 type JobStatus = 'uploaded' | 'processing' | 'completed' | 'failed_retryable' | 'failed_terminal';
 
+const ALLOWED_AI_PROVIDERS = new Set(['groq', 'openrouter']);
+
 export type UploadJobRecord = {
   id: string;
   status: JobStatus;
@@ -162,6 +164,11 @@ export async function getAIConfig(userId: string) {
 }
 
 export async function upsertCredential(userId: string, provider: string, apiKey: string) {
+  const normalizedProvider = provider.trim().toLowerCase();
+  if (!ALLOWED_AI_PROVIDERS.has(normalizedProvider)) {
+    throw new Error('Unsupported provider');
+  }
+
   const supabase = getSupabase();
   const encryptedKey = await encryptSecret(apiKey);
   const keyFingerprint = createHash('sha256').update(apiKey).digest('hex').slice(0, 12);
@@ -169,7 +176,7 @@ export async function upsertCredential(userId: string, provider: string, apiKey:
   const { error } = await supabase.from('user_ai_credentials').upsert(
     {
       user_id: userId,
-      provider,
+      provider: normalizedProvider,
       encrypted_api_key: encryptedKey,
       key_fingerprint: keyFingerprint
     },
