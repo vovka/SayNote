@@ -143,3 +143,48 @@ Replace in-memory implementations with:
 - Completed jobs create notes with nested category paths
 - R2 objects are deleted after successful processing
 - Plaintext API keys are never returned by API
+
+## Local Development Topology (Explicit)
+
+### Supported modes
+
+1. **Primary: containerized full stack (`docker compose`)**
+   - `saynote` service runs frontend + API.
+   - `worker` service runs async job processor.
+2. **Secondary: hybrid local commands**
+   - Frontend and worker run directly with npm/node.
+   - Supabase + R2 still remain externally managed.
+
+### External dependencies (required)
+
+This repo does not include local emulators for Supabase, R2, or queue infrastructure. You must provide:
+
+- Supabase project (Auth + Postgres)
+- Cloudflare R2 bucket and credentials
+- Environment configuration (`DATABASE_URL`, `ENCRYPTION_MASTER_KEY`, R2 credentials, Supabase keys)
+
+### Exact startup commands
+
+Create local environment file first:
+
+```bash
+cp .env.example .env
+```
+
+Primary containerized startup:
+
+```bash
+docker compose up --build
+```
+
+Hybrid startup:
+
+```bash
+npm install
+npm run -w frontend dev
+```
+
+```bash
+npx tsc -p backend/tsconfig.json
+node backend/dist/worker/index.js
+```
