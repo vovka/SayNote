@@ -169,6 +169,19 @@ Alert thresholds:
 
 ## 9) Local Development
 
+### Run with Docker
+
+1. Build and start the app:
+
+```bash
+docker compose up --build
+```
+
+2. Open `http://localhost:3000`.
+3. Stop containers with `Ctrl+C` (or `docker compose down` in another terminal).
+
+### Run without Docker
+
 ```bash
 npm install
 npm run -w frontend dev
