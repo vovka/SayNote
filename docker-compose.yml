@@ -4,10 +4,12 @@ services:
       context: .
       dockerfile: Dockerfile
       target: dev
+    env_file:
+      - .env
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_BASE_URL: http://localhost:3000
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
       NEXT_TELEMETRY_DISABLED: "1"
     volumes:
       - .:/app
@@ -17,19 +19,14 @@ services:
       context: .
       dockerfile: Dockerfile
       target: deps
+    env_file:
+      - .env
     depends_on:
       - saynote
     working_dir: /app
     command: >
       sh -c "npx tsc -p backend/tsconfig.json && node backend/dist/worker/index.js"
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY}
-      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
-      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
-      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
-      R2_BUCKET: ${R2_BUCKET}
-      R2_ENDPOINT: ${R2_ENDPOINT:-}
       WORKER_BATCH_SIZE: ${WORKER_BATCH_SIZE:-5}
       WORKER_POLL_INTERVAL_MS: ${WORKER_POLL_INTERVAL_MS:-2000}
       WORKER_MAX_JOBS: ${WORKER_MAX_JOBS:-0}

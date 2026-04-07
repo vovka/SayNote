@@ -183,7 +183,15 @@ Alert thresholds:
 
 ### Required external dependencies for local mode
 
-Create a `.env` file (or export env vars in your shell) with:
+Copy the template and edit values:
+
+```bash
+cp .env.example .env
+```
+
+`docker compose` now loads `.env` via `env_file` for both `saynote` and `worker` services.
+
+Provide these values in `.env`:
 
 - `NEXT_PUBLIC_BASE_URL` (example: `http://localhost:3000`)
 - `NEXT_PUBLIC_SUPABASE_URL`

@@ -165,6 +165,12 @@ This repo does not include local emulators for Supabase, R2, or queue infrastruc
 
 ### Exact startup commands
 
+Create local environment file first:
+
+```bash
+cp .env.example .env
+```
+
 Primary containerized startup:
 
 ```bash
