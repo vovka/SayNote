@@ -1,3 +1,8 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { AuthGate } from '@/components/auth-gate';
+import { AuthControls } from '@/components/auth-controls';
 import { getNotes } from '@/lib/api/client';
 
 interface CategoryNode {
@@ -25,12 +30,26 @@ function CategoryTree({ node, path = [] }: { node: CategoryNode; path?: string[]
   );
 }
 
-export default async function NotesPage() {
-  const trees = await getNotes();
+function NotesPageContent() {
+  const [trees, setTrees] = useState<CategoryNode[]>([]);
+
+  useEffect(() => {
+    void getNotes().then(setTrees);
+  }, []);
+
   return (
     <main>
+      <AuthControls />
       <h1>Notes</h1>
-      {trees.map((node: CategoryNode) => <CategoryTree key={node.id} node={node} />)}
+      {trees.map((node) => <CategoryTree key={node.id} node={node} />)}
     </main>
+  );
+}
+
+export default function NotesPage() {
+  return (
+    <AuthGate>
+      <NotesPageContent />
+    </AuthGate>
   );
 }

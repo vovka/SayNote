@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import { requireUserId } from '@/lib/auth/session';
 import { getNotesTreeForUser } from '@/lib/api/supabase-server';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const userId = await requireUserId();
+    const userId = await requireUserId(request);
     return NextResponse.json(await getNotesTreeForUser(userId));
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {

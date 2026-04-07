@@ -7,7 +7,7 @@ const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 export async function POST(request: Request) {
   try {
-    const userId = await requireUserId();
+    const userId = await requireUserId(request);
     const formData = await request.formData();
 
     const idempotencyKey = String(formData.get('idempotencyKey') ?? '');

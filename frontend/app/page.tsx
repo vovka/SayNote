@@ -1,16 +1,21 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { AuthGate } from '@/components/auth-gate';
+import { AuthControls } from '@/components/auth-controls';
 import { startRecording, stopRecording } from '@/lib/recording/media-recorder';
 import { queueRecording, startSyncLoop } from '@/lib/sync/sync-manager';
 import { registerServiceWorker } from '@/lib/pwa/register-sw';
+import { getCurrentUserId } from '@/lib/api/client';
 
-export default function RecordPage() {
+function RecordPageContent() {
   const [recording, setRecording] = useState(false);
   const [status, setStatus] = useState('Ready');
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     registerServiceWorker();
+    void getCurrentUserId().then(setUserId);
     const stop = startSyncLoop();
     return () => stop();
   }, []);
@@ -32,14 +37,21 @@ export default function RecordPage() {
       return;
     }
 
-    await queueRecording(payload);
+    if (!userId) {
+      setStatus('Missing authenticated user. Please sign in again.');
+      setRecording(false);
+      return;
+    }
+
+    await queueRecording(userId, payload);
     setStatus(navigator.onLine ? 'Saved locally, uploading' : 'Saved locally, upload queued');
     setRecording(false);
   }
 
   return (
     <main style={{ minHeight: '85vh', display: 'grid', placeItems: 'center' }}>
-      <div style={{ textAlign: 'center' }}>
+      <div style={{ textAlign: 'center', minWidth: 260 }}>
+        <AuthControls />
         <button
           onClick={onTapRecord}
           style={{
@@ -59,5 +71,13 @@ export default function RecordPage() {
         <p><a href="/notes">View notes</a> · <a href="/settings">Settings</a></p>
       </div>
     </main>
+  );
+}
+
+export default function RecordPage() {
+  return (
+    <AuthGate>
+      <RecordPageContent />
+    </AuthGate>
   );
 }
