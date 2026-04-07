@@ -25,16 +25,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run backend tests
-        run: npm run -w backend test
-
-      - name: Run frontend tests (if configured)
-        run: npm run -w frontend test --if-present
-
-      - name: Run shared tests (if configured)
-        run: |
-          if [ -f shared/package.json ]; then
-            npm run -w shared test --if-present
-          else
-            echo "Skipping shared tests: shared/package.json not found"
-          fi
+      - name: Run workspace tests
+        run: npm test
