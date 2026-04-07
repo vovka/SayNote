@@ -5,7 +5,8 @@ import { decryptSecret } from '../security/encryption';
 import { loadJobDependencies, markJobFailed, type ProcessingJobRow } from '../db';
 import { isProviderError, ProviderError, safeErrorMessage, type ProviderFailureKind } from '../providers/errors';
 import { logWorkerFailure, scrubSensitiveFields } from '../security/safe-logging';
-import { getTemporaryAudio, isR2ReadError } from '../storage/r2';
+import { deleteTemporaryAudio, getTemporaryAudio, isR2ReadError } from '../storage/r2';
+import { cleanupTemporaryAudioAfterCompletion } from './cleanup-temporary-audio';
 
 const MAX_RETRIES = Number(process.env.WORKER_MAX_RETRIES ?? 5);
 
@@ -14,6 +15,30 @@ interface ProcessingAttempt {
   transcriptionModel: string;
   categorizationModel: string;
 }
+
+interface ProcessJobDependencies {
+  getTemporaryAudio: typeof getTemporaryAudio;
+  deleteTemporaryAudio: typeof deleteTemporaryAudio;
+  loadJobDependencies: typeof loadJobDependencies;
+  decryptSecret: typeof decryptSecret;
+  getProvider: typeof getProvider;
+  resolveCategoryPath: typeof resolveCategoryPath;
+  markJobFailed: typeof markJobFailed;
+  logWorkerFailure: typeof logWorkerFailure;
+  cleanupTemporaryAudioAfterCompletion: typeof cleanupTemporaryAudioAfterCompletion;
+}
+
+const defaultProcessJobDependencies: ProcessJobDependencies = {
+  getTemporaryAudio,
+  deleteTemporaryAudio,
+  loadJobDependencies,
+  decryptSecret,
+  getProvider,
+  resolveCategoryPath,
+  markJobFailed,
+  logWorkerFailure,
+  cleanupTemporaryAudioAfterCompletion
+};
 
 function getAttempts(config: {
   primary_provider: string;
@@ -42,13 +67,17 @@ function getAttempts(config: {
   return attempts;
 }
 
-export async function processJob(client: PoolClient, job: ProcessingJobRow) {
+export async function processJob(
+  client: PoolClient,
+  job: ProcessingJobRow,
+  deps: ProcessJobDependencies = defaultProcessJobDependencies
+) {
   try {
     if (!job.audio_storage_key) {
       throw new Error('Missing audio storage key');
     }
 
-    const audio = await getTemporaryAudio(job.audio_storage_key).catch((error: unknown) => {
+    const audio = await deps.getTemporaryAudio(job.audio_storage_key).catch((error: unknown) => {
       if (!isR2ReadError(error)) {
         throw error;
       }
@@ -63,7 +92,7 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
       });
     });
 
-    const { config, credentialsByProvider } = await loadJobDependencies(client, job.user_id);
+    const { config, credentialsByProvider } = await deps.loadJobDependencies(client, job.user_id);
     const attempts = getAttempts(config);
 
     let completedAttempt: ProcessingAttempt | null = null;
@@ -80,8 +109,8 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
       }
 
       try {
-        const apiKey = await decryptSecret(credential.encrypted_api_key);
-        const adapter = getProvider(attempt.provider);
+        const apiKey = await deps.decryptSecret(credential.encrypted_api_key);
+        const adapter = deps.getProvider(attempt.provider);
 
         const transcription = await adapter.transcribe({
           model: attempt.transcriptionModel,
@@ -125,7 +154,7 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
       );
 
       if (!existingNote.rowCount) {
-        const categoryId = await resolveCategoryPath(client, job.user_id, categoryPath);
+        const categoryId = await deps.resolveCategoryPath(client, job.user_id, categoryPath);
 
         await client.query(
           `insert into notes (user_id, category_id, source_job_id, text, created_at, processed_at, updated_at, metadata)
@@ -155,6 +184,15 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
       );
 
       await client.query('commit');
+
+      await deps.cleanupTemporaryAudioAfterCompletion({
+        jobId: job.id,
+        userId: job.user_id,
+        audioStorageKey: job.audio_storage_key,
+        deleteAudio: deps.deleteTemporaryAudio,
+        logFailure: deps.logWorkerFailure
+      });
+
       return { status: 'completed' as const };
     } catch (error) {
       await client.query('rollback');
@@ -170,7 +208,7 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
         ? 'PROCESSING_TERMINAL'
         : 'PROCESSING_RETRYABLE';
 
-    await markJobFailed(client, {
+    await deps.markJobFailed(client, {
       jobId: job.id,
       retryCount: requestedRetryCount,
       errorCode,
@@ -178,7 +216,7 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
       terminal
     });
 
-    logWorkerFailure({
+    deps.logWorkerFailure({
       jobId: job.id,
       userId: job.user_id,
       provider: isProviderError(error) ? error.provider : undefined,

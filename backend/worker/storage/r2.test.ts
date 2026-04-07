@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { S3Client } from '@aws-sdk/client-s3';
-import { getTemporaryAudio, isR2ReadError } from './r2.ts';
+import { deleteTemporaryAudio, getTemporaryAudio, isR2ReadError } from './r2.ts';
 
 const ORIGINAL_SEND = S3Client.prototype.send;
 
@@ -67,4 +67,21 @@ test('getTemporaryAudio maps transport failures to retryable R2ReadError', async
       return true;
     }
   );
+});
+
+test('deleteTemporaryAudio issues delete for object key', async () => {
+  setStorageEnv();
+  let capturedCommand: { constructor: { name: string }; input: { Bucket: string; Key: string } } | null = null;
+  S3Client.prototype.send = async (command) => {
+    capturedCommand = command as typeof capturedCommand;
+    return {} as never;
+  };
+
+  const result = await deleteTemporaryAudio('audio/user/to-delete.webm');
+
+  assert.equal(result.deleted, true);
+  assert.equal(result.storageKey, 'audio/user/to-delete.webm');
+  assert.ok(capturedCommand);
+  assert.equal(capturedCommand.constructor.name, 'DeleteObjectCommand');
+  assert.deepEqual(capturedCommand.input, { Bucket: 'test-bucket', Key: 'audio/user/to-delete.webm' });
 });
