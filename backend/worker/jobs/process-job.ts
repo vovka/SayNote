@@ -1,6 +1,6 @@
 import type { PoolClient, QueryResult } from 'pg';
 import { getProvider } from '../providers/registry';
-import { normalizeCategoryPath } from '../categories/resolve-category-path';
+import { normalizeCategoryPath, resolveCategoryPath } from '../categories/resolve-category-path';
 import { decryptSecret } from '../security/encryption';
 import { loadJobDependencies, markJobFailed, type ProcessingJobRow } from '../db';
 import { isProviderError, safeErrorMessage, type ProviderFailureKind } from '../providers/errors';
@@ -38,38 +38,6 @@ function getAttempts(config: {
   }
 
   return attempts;
-}
-
-async function findOrCreateCategoryId(client: PoolClient, userId: string, categoryPath: string[]) {
-  let parentId: string | null = null;
-  for (const segment of categoryPath) {
-    const existing: QueryResult<{ id: string }> = await client.query(
-      `select id from categories where user_id = $1 and parent_id is not distinct from $2 and name = $3 limit 1`,
-      [userId, parentId, segment]
-    );
-
-    if (existing.rowCount && existing.rows[0]) {
-      parentId = existing.rows[0].id;
-      continue;
-    }
-
-    const created: QueryResult<{ id: string }> = await client.query(
-      `insert into categories (user_id, parent_id, name)
-       values ($1, $2, $3)
-       on conflict (user_id, parent_id, name)
-       do update set updated_at = now()
-       returning id`,
-      [userId, parentId, segment]
-    );
-
-    parentId = created.rows[0].id;
-  }
-
-  if (!parentId) {
-    throw new Error('Model returned an empty category path');
-  }
-
-  return parentId;
 }
 
 export async function processJob(client: PoolClient, job: ProcessingJobRow) {
@@ -136,11 +104,11 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
       );
 
       if (!existingNote.rowCount) {
-        const categoryId = await findOrCreateCategoryId(client, job.user_id, categoryPath);
+        const categoryId = await resolveCategoryPath(client, job.user_id, categoryPath);
 
         await client.query(
-          `insert into notes (user_id, category_id, source_job_id, text, metadata)
-           values ($1, $2, $3, $4, $5::jsonb)`,
+          `insert into notes (user_id, category_id, source_job_id, text, created_at, processed_at, updated_at, metadata)
+           values ($1, $2, $3, $4, now(), now(), now(), $5::jsonb)`,
           [
             job.user_id,
             categoryId,

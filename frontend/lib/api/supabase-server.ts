@@ -182,8 +182,13 @@ export async function upsertCredential(userId: string, provider: string, apiKey:
 export async function getNotesTreeForUser(userId: string) {
   const supabase = getSupabase();
   const [categoriesResult, notesResult] = await Promise.all([
-    supabase.from('categories').select('id,parent_id,name').eq('user_id', userId),
-    supabase.from('notes').select('id,category_id,text,created_at').eq('user_id', userId)
+    supabase.from('categories').select('id,parent_id,name').eq('user_id', userId).order('name', { ascending: true }),
+    supabase
+      .from('notes')
+      .select('id,category_id,text,created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
   ]);
 
   if (categoriesResult.error) throw categoriesResult.error;
@@ -212,10 +217,13 @@ export async function getNotesTreeForUser(userId: string) {
   }
 
   function build(parentId?: string): unknown[] {
-    return (byParent.get(parentId) ?? []).map((category) => ({
+    const siblings = (byParent.get(parentId) ?? []).sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    return siblings.map((category) => ({
       id: category.id,
       name: category.name,
-      notes: notesByCategory.get(category.id) ?? [],
+      notes: (notesByCategory.get(category.id) ?? []).sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || a.id.localeCompare(b.id)
+      ),
       children: build(category.id)
     }));
   }
