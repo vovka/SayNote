@@ -14,7 +14,7 @@ const schema = z.object({
 
 export async function PUT(request: Request) {
   try {
-    const userId = await requireUserId();
+    const userId = await requireUserId(request);
     const payload = schema.parse(await request.json());
     await upsertAIConfig(userId, payload);
     return NextResponse.json({ ok: true });
@@ -27,9 +27,9 @@ export async function PUT(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const userId = await requireUserId();
+    const userId = await requireUserId(request);
     return NextResponse.json(await getAIConfig(userId));
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {

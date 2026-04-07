@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import { requireUserId } from '@/lib/auth/session';
 import { getJobForUser } from '@/lib/api/supabase-server';
 
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const userId = await requireUserId();
+    const userId = await requireUserId(request);
     const { id } = await params;
     const job = await getJobForUser(id, userId);
 

@@ -4,7 +4,7 @@ import { uploadAudio } from '@/lib/api/client';
 const RETRY_BASE_MS = 1_000;
 const RETRY_CAP_MS = 60_000;
 
-export async function queueRecording(payload: {
+export async function queueRecording(userId: string, payload: {
   audioBlob: Blob;
   mimeType: string;
   durationMs: number;
@@ -15,7 +15,7 @@ export async function queueRecording(payload: {
 
   await db.recordings.put({
     id,
-    userId: 'current-user',
+    userId,
     ...payload,
     status: 'queued_upload',
     retryCount: 0,

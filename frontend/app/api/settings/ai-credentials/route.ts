@@ -10,7 +10,7 @@ const schema = z.object({
 
 export async function PUT(request: Request) {
   try {
-    const userId = await requireUserId();
+    const userId = await requireUserId(request);
     const payload = schema.parse(await request.json());
 
     await upsertCredential(userId, payload.provider, payload.apiKey);

@@ -1,9 +1,11 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { AuthGate } from '@/components/auth-gate';
+import { AuthControls } from '@/components/auth-controls';
 import { putAICredentials, putAIConfig } from '@/lib/api/client';
 
-export default function SettingsPage() {
+function SettingsPageContent() {
   const [provider, setProvider] = useState('groq');
   const [transcriptionModel, setTranscriptionModel] = useState('whisper-large-v3');
   const [categorizationModel, setCategorizationModel] = useState('llama-3.3-70b-versatile');
@@ -26,6 +28,7 @@ export default function SettingsPage() {
 
   return (
     <main>
+      <AuthControls />
       <h1>AI Settings</h1>
       <form onSubmit={onSubmit}>
         <label>Provider <input value={provider} onChange={(e) => setProvider(e.target.value)} /></label><br />
@@ -36,5 +39,13 @@ export default function SettingsPage() {
       </form>
       <p>{message}</p>
     </main>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <AuthGate>
+      <SettingsPageContent />
+    </AuthGate>
   );
 }
