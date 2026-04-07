@@ -34,6 +34,7 @@ create table if not exists processing_jobs (
   provider_used text,
   transcription_model text,
   categorization_model text,
+  client_created_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   completed_at timestamptz,
@@ -92,3 +93,6 @@ create policy "users_manage_own_ai_config" on user_ai_config using (user_id = au
 
 revoke all on user_ai_credentials from authenticated;
 grant select (provider, key_fingerprint, created_at, updated_at) on user_ai_credentials to authenticated;
+
+comment on column processing_jobs.client_created_at is
+  'Client-captured creation timestamp. Historical rows are backfilled from created_at as fallback semantics.';

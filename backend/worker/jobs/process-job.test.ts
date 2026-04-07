@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+test('process-job note insert uses client_created_at and now() for processed_at', async () => {
+  const source = await readFile(new URL('./process-job.ts', import.meta.url), 'utf8');
+
+  assert.match(
+    source,
+    /insert into notes \(user_id, category_id, source_job_id, text, created_at, processed_at, updated_at, metadata\)[\s\S]*values \(\$1, \$2, \$3, \$4, \$5::timestamptz, now\(\), now\(\), \$6::jsonb\)/
+  );
+  assert.match(source, /job\.client_created_at/);
+});

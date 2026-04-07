@@ -133,12 +133,13 @@ export async function processJob(
 
         await client.query(
           `insert into notes (user_id, category_id, source_job_id, text, created_at, processed_at, updated_at, metadata)
-           values ($1, $2, $3, $4, now(), now(), now(), $5::jsonb)`,
+           values ($1, $2, $3, $4, $5::timestamptz, now(), now(), $6::jsonb)`,
           [
             job.user_id,
             categoryId,
             job.id,
             transcriptionText,
+            job.client_created_at,
             JSON.stringify({ provider: completedAttempt.provider, categoryPath })
           ]
         );

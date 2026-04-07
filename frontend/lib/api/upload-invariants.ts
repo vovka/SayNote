@@ -21,6 +21,7 @@ export interface UploadJobLike {
   audioStorageKey: string | null;
   audioMimeType: string;
   audioDurationMs: number | null;
+  clientCreatedAt: string;
   createdAt: string;
   updatedAt: string;
 }
