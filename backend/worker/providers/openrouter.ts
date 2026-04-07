@@ -55,7 +55,13 @@ function parseMessageContent(body: JsonRecord) {
 }
 
 export class OpenRouterAdapter implements AIProviderAdapter {
-  async transcribe(input: { model: string; apiKey: string; audioUrl?: string; audioBuffer?: Buffer }): Promise<TranscriptionResult> {
+  async transcribe(input: {
+    model: string;
+    apiKey: string;
+    audioUrl?: string;
+    audioBuffer?: Buffer;
+    metadata?: Record<string, unknown>;
+  }): Promise<TranscriptionResult> {
     if (!input.audioBuffer && !(input.audioUrl && /^https?:\/\//.test(input.audioUrl))) {
       throw new ProviderError({
         provider: 'openrouter',
@@ -71,7 +77,9 @@ export class OpenRouterAdapter implements AIProviderAdapter {
           type: 'input_audio' as const,
           input_audio: {
             data: input.audioBuffer.toString('base64'),
-            format: 'wav'
+            format: typeof input.metadata?.contentType === 'string' && input.metadata.contentType.includes('/')
+              ? input.metadata.contentType.split('/')[1]
+              : 'wav'
           }
         }
       : {

@@ -3,8 +3,9 @@ import { getProvider } from '../providers/registry';
 import { normalizeCategoryPath, resolveCategoryPath } from '../categories/resolve-category-path';
 import { decryptSecret } from '../security/encryption';
 import { loadJobDependencies, markJobFailed, type ProcessingJobRow } from '../db';
-import { isProviderError, safeErrorMessage, type ProviderFailureKind } from '../providers/errors';
+import { isProviderError, ProviderError, safeErrorMessage, type ProviderFailureKind } from '../providers/errors';
 import { logWorkerFailure, scrubSensitiveFields } from '../security/safe-logging';
+import { getTemporaryAudio, isR2ReadError } from '../storage/r2';
 
 const MAX_RETRIES = Number(process.env.WORKER_MAX_RETRIES ?? 5);
 
@@ -47,6 +48,21 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
       throw new Error('Missing audio storage key');
     }
 
+    const audio = await getTemporaryAudio(job.audio_storage_key).catch((error: unknown) => {
+      if (!isR2ReadError(error)) {
+        throw error;
+      }
+
+      throw new ProviderError({
+        provider: 'r2',
+        operation: 'transcribe',
+        kind: error.kind,
+        code: error.code,
+        safeMessage: error.safeMessage,
+        cause: error
+      });
+    });
+
     const { config, credentialsByProvider } = await loadJobDependencies(client, job.user_id);
     const attempts = getAttempts(config);
 
@@ -70,7 +86,11 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
         const transcription = await adapter.transcribe({
           model: attempt.transcriptionModel,
           apiKey,
-          audioUrl: job.audio_storage_key
+          audioBuffer: audio.buffer,
+          metadata: {
+            storageKey: job.audio_storage_key,
+            contentType: audio.contentType
+          }
         });
 
         const categorization = await adapter.categorize({
