@@ -7,7 +7,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --experimental-strip-types lib/api/upload-invariants.test.ts lib/sync/sync-core.test.ts lib/notes/refresh-policy.test.ts"
+    "test": "node --test --experimental-strip-types $(find lib -name '*.test.ts' -print)"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1025.0",
