@@ -26,6 +26,10 @@ export function scrubSensitiveFields(value: unknown): unknown {
   return output;
 }
 
+export function logWorkerEvent(event: string, payload: Record<string, unknown> = {}) {
+  console.log(`[${event}]`, JSON.stringify(scrubSensitiveFields(payload)));
+}
+
 export function toSafeErrorMetadata(error: unknown): { name?: string; message: string } {
   if (error instanceof Error) {
     return {

@@ -2,8 +2,8 @@
   "name": "@saynote/backend",
   "private": true,
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "worker": "node dist/worker.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "worker": "node dist/backend/worker/index.js",
     "test": "node --test --experimental-strip-types $(find worker -name '*.test.ts' -print)"
   },
   "dependencies": {

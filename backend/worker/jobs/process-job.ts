@@ -4,7 +4,7 @@ import { normalizeCategoryPath, resolveCategoryPath } from '../categories/resolv
 import { decryptSecret } from '../security/encryption';
 import { loadJobDependencies, markJobFailed, type ProcessingJobRow } from '../db';
 import { isProviderError, ProviderError, safeErrorMessage, type ProviderFailureKind } from '../providers/errors';
-import { logWorkerFailure, scrubSensitiveFields } from '../security/safe-logging';
+import { logWorkerEvent, logWorkerFailure, scrubSensitiveFields } from '../security/safe-logging';
 import { deleteTemporaryAudio, getTemporaryAudio, isR2ReadError } from '../storage/r2';
 import { cleanupTemporaryAudioAfterCompletion } from './cleanup-temporary-audio';
 import { getAttempts, shouldTryFallback, type ProcessingAttempt } from './attempt-policy';
@@ -35,12 +35,35 @@ const defaultProcessJobDependencies: ProcessJobDependencies = {
   cleanupTemporaryAudioAfterCompletion
 };
 
+function getFailureLogPayload(error: unknown) {
+  if (isProviderError(error)) {
+    return {
+      errorName: error.name,
+      errorCode: error.code,
+      failureKind: error.kind,
+      operation: error.operation
+    };
+  }
+
+  if (error instanceof Error) {
+    return { errorName: error.name };
+  }
+
+  return {};
+}
+
 export async function processJob(
   client: PoolClient,
   job: ProcessingJobRow,
   deps: ProcessJobDependencies = defaultProcessJobDependencies
 ) {
   try {
+    logWorkerEvent('worker_job_started', {
+      jobId: job.id,
+      userId: job.user_id,
+      retryCount: job.retry_count
+    });
+
     if (!job.audio_storage_key) {
       throw new Error('Missing audio storage key');
     }
@@ -78,6 +101,16 @@ export async function processJob(
       }
 
       try {
+        logWorkerEvent('worker_job_attempt_started', {
+          jobId: job.id,
+          userId: job.user_id,
+          attemptIndex: index + 1,
+          totalAttempts: attempts.length,
+          provider: attempt.provider,
+          transcriptionModel: attempt.transcriptionModel,
+          categorizationModel: attempt.categorizationModel
+        });
+
         const apiKey = await deps.decryptSecret(credential.encrypted_api_key);
         const adapter = deps.getProvider(attempt.provider);
 
@@ -104,14 +137,26 @@ export async function processJob(
       } catch (error) {
         lastFailure = error;
         const hasFallback = index < attempts.length - 1;
-        if (
-          !shouldTryFallback({
-            error,
-            attempt,
-            hasFallback,
-            fallbackOnTerminalPrimaryFailure
-          })
-        ) {
+        const willTryFallback = shouldTryFallback({
+          error,
+          attempt,
+          hasFallback,
+          fallbackOnTerminalPrimaryFailure
+        });
+
+        if (willTryFallback) {
+          logWorkerEvent('worker_job_attempt_failed', {
+            jobId: job.id,
+            userId: job.user_id,
+            attemptIndex: index + 1,
+            totalAttempts: attempts.length,
+            provider: attempt.provider,
+            willTryFallback,
+            ...getFailureLogPayload(error)
+          });
+        }
+
+        if (!willTryFallback) {
           break;
         }
       }
@@ -167,6 +212,16 @@ export async function processJob(
         audioStorageKey: job.audio_storage_key,
         deleteAudio: deps.deleteTemporaryAudio,
         logFailure: deps.logWorkerFailure
+      });
+
+      logWorkerEvent('worker_job_completed', {
+        jobId: job.id,
+        userId: job.user_id,
+        provider: completedAttempt.provider,
+        transcriptionModel: completedAttempt.transcriptionModel,
+        categorizationModel: completedAttempt.categorizationModel,
+        categoryDepth: categoryPath.length,
+        retryCount: job.retry_count
       });
 
       return { status: 'completed' as const };

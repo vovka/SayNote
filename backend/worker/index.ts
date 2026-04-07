@@ -1,6 +1,9 @@
 import { claimJobs, closePool, withClient } from './db';
 import { processJob } from './jobs/process-job';
 import { ensureEncryptionReady } from './security/encryption';
+import { logWorkerEvent } from './security/safe-logging';
+
+const IDLE_HEARTBEAT_MS = 30_000;
 
 export interface WorkerRunOptions {
   batchSize?: number;
@@ -21,6 +24,15 @@ export async function runWorker(options: WorkerRunOptions = {}) {
   const continuous = options.continuous ?? process.env.WORKER_CONTINUOUS !== 'false';
 
   let processed = 0;
+  let idleSince: number | null = null;
+  let lastIdleLogAt = 0;
+
+  logWorkerEvent('worker_started', {
+    batchSize,
+    pollIntervalMs,
+    maxJobs,
+    continuous
+  });
 
   while (true) {
     if (maxJobs > 0 && processed >= maxJobs) {
@@ -28,15 +40,38 @@ export async function runWorker(options: WorkerRunOptions = {}) {
     }
 
     const remaining = maxJobs > 0 ? Math.max(maxJobs - processed, 0) : batchSize;
-    const jobs = await claimJobs(Math.min(batchSize, Math.max(remaining, 1)));
+    const claimLimit = Math.min(batchSize, Math.max(remaining, 1));
+    const jobs = await claimJobs(claimLimit);
 
     if (jobs.length === 0) {
+      const now = Date.now();
+      if (idleSince === null) {
+        idleSince = now;
+        lastIdleLogAt = now;
+        logWorkerEvent('worker_waiting', { pollIntervalMs });
+      } else if (now - lastIdleLogAt >= IDLE_HEARTBEAT_MS) {
+        lastIdleLogAt = now;
+        logWorkerEvent('worker_waiting', {
+          pollIntervalMs,
+          idleForMs: now - idleSince
+        });
+      }
+
       if (!continuous) {
         break;
       }
       await sleep(pollIntervalMs);
       continue;
     }
+
+    const idleForMs = idleSince === null ? null : Date.now() - idleSince;
+    idleSince = null;
+    lastIdleLogAt = 0;
+    logWorkerEvent('worker_jobs_claimed', {
+      count: jobs.length,
+      claimLimit,
+      idleForMs
+    });
 
     for (const job of jobs) {
       await withClient((client) => processJob(client, job));
@@ -53,7 +88,7 @@ export async function runWorker(options: WorkerRunOptions = {}) {
 async function main() {
   try {
     const result = await runWorker();
-    console.log(`Worker finished after processing ${result.processed} job(s).`);
+    logWorkerEvent('worker_finished', { processed: result.processed });
   } finally {
     await closePool();
   }

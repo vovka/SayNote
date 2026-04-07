@@ -14,6 +14,11 @@ export function getSupabaseBrowserClient() {
     throw new Error('NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be configured');
   }
 
-  client = createClient(url, anonKey);
+  client = createClient(url, anonKey, {
+    auth: {
+      detectSessionInUrl: true,
+      flowType: 'pkce'
+    }
+  });
   return client;
 }

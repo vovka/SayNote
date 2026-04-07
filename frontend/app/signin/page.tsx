@@ -1,6 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
+import { buildAuthCallbackUrl, getSafeNextPath } from '@/lib/auth/redirect';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 
 export default function SignInPage() {
@@ -8,15 +9,12 @@ export default function SignInPage() {
 
   async function signInWithGoogle() {
     const supabase = getSupabaseBrowserClient();
-    const redirectTo = `${window.location.origin}/auth/callback`;
-    const next = params.get('next') || '/';
+    const next = getSafeNextPath(params.get('next'));
+    const redirectTo = buildAuthCallbackUrl(window.location.origin, next);
 
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo,
-        queryParams: { next }
-      }
+      options: { redirectTo }
     });
   }
 

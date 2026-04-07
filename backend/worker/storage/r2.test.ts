@@ -77,7 +77,7 @@ test('getTemporaryAudio maps transport failures to retryable R2ReadError', async
 test('deleteTemporaryAudio issues delete for object key', async () => {
   setStorageEnv();
   type CapturedCommand = { constructor: { name: string }; input: { Bucket: string; Key: string } };
-  let capturedCommand: CapturedCommand | null = null;
+  let capturedCommand!: CapturedCommand;
   S3Client.prototype.send = async (command) => {
     capturedCommand = command as CapturedCommand;
     return {} as never;
@@ -87,7 +87,6 @@ test('deleteTemporaryAudio issues delete for object key', async () => {
 
   assert.equal(result.deleted, true);
   assert.equal(result.storageKey, 'audio/user/to-delete.webm');
-  assert.ok(capturedCommand);
   assert.equal(capturedCommand.constructor.name, 'DeleteObjectCommand');
   assert.deepEqual(capturedCommand.input, { Bucket: 'test-bucket', Key: 'audio/user/to-delete.webm' });
 });
