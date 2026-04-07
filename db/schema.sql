@@ -72,6 +72,7 @@ create table if not exists user_ai_config (
   fallback_provider text,
   fallback_transcription_model text,
   fallback_categorization_model text,
+  fallback_on_terminal_primary_failure boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

@@ -38,6 +38,10 @@ export async function putAIConfig(input: {
   primaryProvider: string;
   transcriptionModel: string;
   categorizationModel: string;
+  fallbackProvider?: string;
+  fallbackTranscriptionModel?: string;
+  fallbackCategorizationModel?: string;
+  fallbackOnTerminalPrimaryFailure?: boolean;
 }) {
   const response = await authFetch('/api/settings/ai-config', {
     method: 'PUT',

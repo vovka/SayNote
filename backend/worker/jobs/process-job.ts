@@ -7,14 +7,9 @@ import { isProviderError, ProviderError, safeErrorMessage, type ProviderFailureK
 import { logWorkerFailure, scrubSensitiveFields } from '../security/safe-logging';
 import { deleteTemporaryAudio, getTemporaryAudio, isR2ReadError } from '../storage/r2';
 import { cleanupTemporaryAudioAfterCompletion } from './cleanup-temporary-audio';
+import { getAttempts, shouldTryFallback, type ProcessingAttempt } from './attempt-policy';
 
 const MAX_RETRIES = Number(process.env.WORKER_MAX_RETRIES ?? 5);
-
-interface ProcessingAttempt {
-  provider: string;
-  transcriptionModel: string;
-  categorizationModel: string;
-}
 
 interface ProcessJobDependencies {
   getTemporaryAudio: typeof getTemporaryAudio;
@@ -39,33 +34,6 @@ const defaultProcessJobDependencies: ProcessJobDependencies = {
   logWorkerFailure,
   cleanupTemporaryAudioAfterCompletion
 };
-
-function getAttempts(config: {
-  primary_provider: string;
-  transcription_model: string;
-  categorization_model: string;
-  fallback_provider: string | null;
-  fallback_transcription_model: string | null;
-  fallback_categorization_model: string | null;
-}) {
-  const attempts: ProcessingAttempt[] = [
-    {
-      provider: config.primary_provider,
-      transcriptionModel: config.transcription_model,
-      categorizationModel: config.categorization_model
-    }
-  ];
-
-  if (config.fallback_provider && config.fallback_transcription_model && config.fallback_categorization_model) {
-    attempts.push({
-      provider: config.fallback_provider,
-      transcriptionModel: config.fallback_transcription_model,
-      categorizationModel: config.fallback_categorization_model
-    });
-  }
-
-  return attempts;
-}
 
 export async function processJob(
   client: PoolClient,
@@ -93,7 +61,8 @@ export async function processJob(
     });
 
     const { config, credentialsByProvider } = await deps.loadJobDependencies(client, job.user_id);
-    const attempts = getAttempts(config);
+    const attemptPlan = getAttempts(config);
+    const { attempts, fallbackOnTerminalPrimaryFailure } = attemptPlan;
 
     let completedAttempt: ProcessingAttempt | null = null;
     let transcriptionText = '';
@@ -134,9 +103,15 @@ export async function processJob(
         break;
       } catch (error) {
         lastFailure = error;
-        const retryable = isProviderError(error) ? error.kind === 'retryable' : true;
         const hasFallback = index < attempts.length - 1;
-        if (!retryable || !hasFallback) {
+        if (
+          !shouldTryFallback({
+            error,
+            attempt,
+            hasFallback,
+            fallbackOnTerminalPrimaryFailure
+          })
+        ) {
           break;
         }
       }
