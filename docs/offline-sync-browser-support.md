@@ -42,3 +42,14 @@ Validated scenarios:
 - Safari/iOS WebKit: foreground sync path supported; Background Sync should be considered unavailable/limited.
 
 Because browser support can change over time, keep Background Sync as progressive enhancement only and do not depend on it for correctness.
+
+## Worker temporary-audio retention and cleanup
+
+- Uploaded raw audio is stored in R2 as temporary worker input until processing finishes.
+- On successful processing, the worker performs a best-effort delete of the temporary object after the note and job are committed as `completed`.
+- If that delete fails, completion is **not** rolled back; the worker logs a safe operational error and leaves the note/job intact.
+
+### Stale audio lifecycle
+
+- **Abandoned/failed uploads:** apply an R2 lifecycle expiration rule to the temporary audio prefix (for example `audio/`) so objects are automatically removed even if the worker never reaches successful cleanup.
+- **Expected cleanup window:** set lifecycle expiration to roughly **24-72 hours**. This keeps enough buffer for retries/investigation while preventing long-term storage growth from stale objects.

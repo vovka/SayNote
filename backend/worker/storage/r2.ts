@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 const R2_ALLOWED_MIME_TYPES = new Set(['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav']);
 
@@ -167,5 +167,14 @@ export async function getTemporaryAudio(storageKey: string) {
 }
 
 export async function deleteTemporaryAudio(storageKey: string) {
+  const bucket = getRequiredEnv('R2_BUCKET');
+  const client = buildR2Client();
+  await client.send(
+    new DeleteObjectCommand({
+      Bucket: bucket,
+      Key: storageKey
+    })
+  );
+
   return { storageKey, deleted: true };
 }
