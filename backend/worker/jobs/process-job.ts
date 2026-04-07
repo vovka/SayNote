@@ -3,14 +3,41 @@ import { getProvider } from '../providers/registry';
 import { normalizeCategoryPath } from '../categories/resolve-category-path';
 import { decryptSecret } from '../security/encryption';
 import { loadJobDependencies, markJobFailed, type ProcessingJobRow } from '../db';
+import { isProviderError, safeErrorMessage, type ProviderFailureKind } from '../providers/errors';
 
 const MAX_RETRIES = Number(process.env.WORKER_MAX_RETRIES ?? 5);
 
-function errorToSafeMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message.slice(0, 512);
+interface ProcessingAttempt {
+  provider: string;
+  transcriptionModel: string;
+  categorizationModel: string;
+}
+
+function getAttempts(config: {
+  primary_provider: string;
+  transcription_model: string;
+  categorization_model: string;
+  fallback_provider: string | null;
+  fallback_transcription_model: string | null;
+  fallback_categorization_model: string | null;
+}) {
+  const attempts: ProcessingAttempt[] = [
+    {
+      provider: config.primary_provider,
+      transcriptionModel: config.transcription_model,
+      categorizationModel: config.categorization_model
+    }
+  ];
+
+  if (config.fallback_provider && config.fallback_transcription_model && config.fallback_categorization_model) {
+    attempts.push({
+      provider: config.fallback_provider,
+      transcriptionModel: config.fallback_transcription_model,
+      categorizationModel: config.fallback_categorization_model
+    });
   }
-  return 'Unknown processing error';
+
+  return attempts;
 }
 
 async function findOrCreateCategoryId(client: PoolClient, userId: string, categoryPath: string[]) {
@@ -51,23 +78,55 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
       throw new Error('Missing audio storage key');
     }
 
-    const { config, credential } = await loadJobDependencies(client, job.user_id);
-    const apiKey = await decryptSecret(credential.encrypted_api_key);
+    const { config, credentialsByProvider } = await loadJobDependencies(client, job.user_id);
+    const attempts = getAttempts(config);
 
-    const adapter = getProvider(config.primary_provider);
-    const transcription = await adapter.transcribe({
-      model: config.transcription_model,
-      apiKey,
-      audioUrl: job.audio_storage_key
-    });
+    let completedAttempt: ProcessingAttempt | null = null;
+    let transcriptionText = '';
+    let categoryPath: string[] = [];
+    let lastFailure: unknown;
 
-    const categorization = await adapter.categorize({
-      text: transcription.text,
-      model: config.categorization_model,
-      apiKey
-    });
+    for (let index = 0; index < attempts.length; index += 1) {
+      const attempt = attempts[index];
+      const credential = credentialsByProvider.get(attempt.provider);
+      if (!credential) {
+        lastFailure = new Error(`AI credential missing for provider ${attempt.provider}`);
+        break;
+      }
 
-    const categoryPath = normalizeCategoryPath(categorization.categoryPath);
+      try {
+        const apiKey = await decryptSecret(credential.encrypted_api_key);
+        const adapter = getProvider(attempt.provider);
+
+        const transcription = await adapter.transcribe({
+          model: attempt.transcriptionModel,
+          apiKey,
+          audioUrl: job.audio_storage_key
+        });
+
+        const categorization = await adapter.categorize({
+          text: transcription.text,
+          model: attempt.categorizationModel,
+          apiKey
+        });
+
+        transcriptionText = transcription.text;
+        categoryPath = normalizeCategoryPath(categorization.categoryPath);
+        completedAttempt = attempt;
+        break;
+      } catch (error) {
+        lastFailure = error;
+        const retryable = isProviderError(error) ? error.kind === 'retryable' : true;
+        const hasFallback = index < attempts.length - 1;
+        if (!retryable || !hasFallback) {
+          break;
+        }
+      }
+    }
+
+    if (!completedAttempt) {
+      throw lastFailure ?? new Error('Failed to process job');
+    }
 
     await client.query('begin');
     try {
@@ -86,8 +145,8 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
             job.user_id,
             categoryId,
             job.id,
-            transcription.text,
-            JSON.stringify({ provider: config.primary_provider, categoryPath })
+            transcriptionText,
+            JSON.stringify({ provider: completedAttempt.provider, categoryPath })
           ]
         );
       }
@@ -103,7 +162,7 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
              error_code = null,
              error_message_safe = null
          where id = $1`,
-        [job.id, config.primary_provider, config.transcription_model, config.categorization_model]
+        [job.id, completedAttempt.provider, completedAttempt.transcriptionModel, completedAttempt.categorizationModel]
       );
 
       await client.query('commit');
@@ -113,14 +172,19 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
       throw error;
     }
   } catch (error) {
-    const retryCount = job.retry_count + 1;
-    const terminal = retryCount >= MAX_RETRIES;
+    const requestedRetryCount = job.retry_count + 1;
+    const failureKind: ProviderFailureKind = isProviderError(error) ? error.kind : 'retryable';
+    const terminal = failureKind === 'terminal' || requestedRetryCount >= MAX_RETRIES;
 
     await markJobFailed(client, {
       jobId: job.id,
-      retryCount,
-      errorCode: terminal ? 'PROCESSING_TERMINAL' : 'PROCESSING_RETRYABLE',
-      errorMessageSafe: errorToSafeMessage(error),
+      retryCount: requestedRetryCount,
+      errorCode: isProviderError(error)
+        ? `PROVIDER_${error.provider.toUpperCase()}_${error.code}`
+        : terminal
+          ? 'PROCESSING_TERMINAL'
+          : 'PROCESSING_RETRYABLE',
+      errorMessageSafe: safeErrorMessage(error),
       terminal
     });
 
