@@ -51,13 +51,22 @@ function normalizeCategoryPath(rawPath: unknown) {
 }
 
 export class GroqAdapter implements AIProviderAdapter {
-  async transcribe(input: { model: string; apiKey: string; audioUrl?: string; audioBuffer?: Buffer }): Promise<TranscriptionResult> {
+  async transcribe(input: {
+    model: string;
+    apiKey: string;
+    audioUrl?: string;
+    audioBuffer?: Buffer;
+    metadata?: Record<string, unknown>;
+  }): Promise<TranscriptionResult> {
     const form = new FormData();
     form.set('model', input.model);
 
     if (input.audioBuffer && input.audioBuffer.byteLength > 0) {
-      const file = new Blob([input.audioBuffer], { type: 'audio/webm' });
-      form.set('file', file, 'recording.webm');
+      const contentType = typeof input.metadata?.contentType === 'string' ? input.metadata.contentType : 'audio/webm';
+      const storageKey = typeof input.metadata?.storageKey === 'string' ? input.metadata.storageKey : '';
+      const extension = storageKey.split('.').pop() || 'webm';
+      const file = new Blob([new Uint8Array(input.audioBuffer)], { type: contentType });
+      form.set('file', file, `recording.${extension}`);
     } else if (input.audioUrl && /^https?:\/\//.test(input.audioUrl)) {
       form.set('url', input.audioUrl);
     } else {
