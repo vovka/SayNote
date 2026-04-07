@@ -1,5 +1,6 @@
 import { claimJobs, closePool, withClient } from './db';
 import { processJob } from './jobs/process-job';
+import { ensureEncryptionReady } from './security/encryption';
 
 export interface WorkerRunOptions {
   batchSize?: number;
@@ -13,6 +14,7 @@ function sleep(ms: number) {
 }
 
 export async function runWorker(options: WorkerRunOptions = {}) {
+  ensureEncryptionReady();
   const batchSize = options.batchSize ?? Number(process.env.WORKER_BATCH_SIZE ?? 5);
   const pollIntervalMs = options.pollIntervalMs ?? Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000);
   const maxJobs = options.maxJobs ?? Number(process.env.WORKER_MAX_JOBS ?? 0);

@@ -4,6 +4,7 @@ import { normalizeCategoryPath, resolveCategoryPath } from '../categories/resolv
 import { decryptSecret } from '../security/encryption';
 import { loadJobDependencies, markJobFailed, type ProcessingJobRow } from '../db';
 import { isProviderError, safeErrorMessage, type ProviderFailureKind } from '../providers/errors';
+import { logWorkerFailure, scrubSensitiveFields } from '../security/safe-logging';
 
 const MAX_RETRIES = Number(process.env.WORKER_MAX_RETRIES ?? 5);
 
@@ -143,17 +144,26 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
     const requestedRetryCount = job.retry_count + 1;
     const failureKind: ProviderFailureKind = isProviderError(error) ? error.kind : 'retryable';
     const terminal = failureKind === 'terminal' || requestedRetryCount >= MAX_RETRIES;
+    const errorCode = isProviderError(error)
+      ? `PROVIDER_${error.provider.toUpperCase()}_${error.code}`
+      : terminal
+        ? 'PROCESSING_TERMINAL'
+        : 'PROCESSING_RETRYABLE';
 
     await markJobFailed(client, {
       jobId: job.id,
       retryCount: requestedRetryCount,
-      errorCode: isProviderError(error)
-        ? `PROVIDER_${error.provider.toUpperCase()}_${error.code}`
-        : terminal
-          ? 'PROCESSING_TERMINAL'
-          : 'PROCESSING_RETRYABLE',
-      errorMessageSafe: safeErrorMessage(error),
+      errorCode,
+      errorMessageSafe: safeErrorMessage(scrubSensitiveFields(error)),
       terminal
+    });
+
+    logWorkerFailure({
+      jobId: job.id,
+      userId: job.user_id,
+      provider: isProviderError(error) ? error.provider : undefined,
+      errorCode,
+      error
     });
 
     return { status: terminal ? ('failed_terminal' as const) : ('failed_retryable' as const) };
