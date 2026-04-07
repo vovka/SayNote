@@ -12,6 +12,31 @@ services:
     volumes:
       - .:/app
       - saynote_node_modules:/app/node_modules
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: deps
+    depends_on:
+      - saynote
+    working_dir: /app
+    command: >
+      sh -c "npx tsc -p backend/tsconfig.json && node backend/dist/worker/index.js"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+      R2_BUCKET: ${R2_BUCKET}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      WORKER_BATCH_SIZE: ${WORKER_BATCH_SIZE:-5}
+      WORKER_POLL_INTERVAL_MS: ${WORKER_POLL_INTERVAL_MS:-2000}
+      WORKER_MAX_JOBS: ${WORKER_MAX_JOBS:-0}
+      WORKER_CONTINUOUS: ${WORKER_CONTINUOUS:-true}
+    volumes:
+      - .:/app
+      - saynote_node_modules:/app/node_modules
 
 volumes:
   saynote_node_modules:

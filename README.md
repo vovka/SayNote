@@ -171,44 +171,92 @@ Alert thresholds:
 
 ## 9) Local Development
 
-### Run with Docker
+### Supported local model decision
 
-#### Development mode (hot reload)
+**Primary model: containerized full stack + external managed dependencies.**
 
-1. Build and start the container:
+- Primary day-to-day workflow is `docker compose` with two containers:
+  - `saynote` (frontend/API via Next.js)
+  - `worker` (polling job processor)
+- Supabase (Auth + Postgres) and Cloudflare R2 are **not** emulated locally in this repository and must be provisioned externally.
+- Hybrid local commands (host-running `npm` + Node) are still supported for debugging and faster iteration.
+
+### Required external dependencies for local mode
+
+Create a `.env` file (or export env vars in your shell) with:
+
+- `NEXT_PUBLIC_BASE_URL` (example: `http://localhost:3000`)
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL` (Supabase Postgres connection string)
+- `ENCRYPTION_MASTER_KEY` (32+ chars)
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET`
+- `R2_ENDPOINT` (optional, if required by your R2 setup)
+
+### Primary startup (containerized)
 
 ```bash
 docker compose up --build
 ```
 
-2. Open `http://localhost:3000`.
-3. Stop with `Ctrl+C` (or run `docker compose down` in another terminal).
+What this starts:
+- Frontend/API at `http://localhost:3000`
+- Worker loop that claims and processes jobs from `processing_jobs`
 
-The compose setup mounts your local repository into `/app`, so frontend code changes reload automatically.
-
-#### Production-like mode (optional)
-
-If you want to run the production image locally:
+Stop with `Ctrl+C` or:
 
 ```bash
-docker build -t saynote:local --target runner .
-docker run --rm -p 3000:3000 -e NEXT_PUBLIC_BASE_URL=http://localhost:3000 saynote:local
+docker compose down
 ```
 
-### Run without Docker
+### Hybrid startup (local commands)
+
+Use this when you want to run processes directly on your machine while still using external Supabase/R2.
+
+Frontend:
 
 ```bash
 npm install
 npm run -w frontend dev
 ```
 
-Open `http://localhost:3000`.
+Worker (separate terminal):
 
-To typecheck:
+```bash
+npx tsc -p backend/tsconfig.json
+node backend/dist/worker/index.js
+```
+
+Optional checks:
 
 ```bash
 npm run typecheck
 ```
+
+### Smoke-test walkthrough (local)
+
+1. Start the app + worker (`docker compose up --build`, or hybrid commands above).
+2. Open `http://localhost:3000`.
+3. Sign in with your Supabase-authenticated user.
+4. Record a short voice note on `/`.
+5. Confirm upload request succeeds (`POST /api/audio/upload` returns queued job id).
+6. Watch worker logs and verify job transitions:
+   - `uploaded`/`failed_retryable` -> `processing` -> `completed`
+7. Open `/notes` and verify the processed note appears in the categorized tree.
+
+### Explicitly unsupported local emulators
+
+The repository currently does **not** ship:
+
+- Local Supabase emulator stack (Auth/Postgres/Storage)
+- Local S3/R2 emulator configuration (for example MinIO wired as drop-in)
+- Local queue broker emulator (Upstash/SQS equivalent)
+
+Because of that, a working local setup requires externally provisioned Supabase and Cloudflare R2 services.
 
 ## 10) Production Readiness Gaps (Intentional)
 
@@ -219,4 +267,3 @@ This MVP implementation leaves the following as integration tasks:
 - durable queue or atomic polling lock for worker
 - provider SDK HTTP implementations in adapters
 - end-to-end integration tests
-
