@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AuthGate } from '@/components/auth-gate';
 import { AuthControls } from '@/components/auth-controls';
 import { getNotes } from '@/lib/api/client';
 import { db, type RecordingEntity } from '@/lib/db/indexeddb';
+import { SYNC_JOB_COMPLETED_EVENT } from '@/lib/sync/sync-manager';
 
 interface CategoryNode {
   id: string;
@@ -34,25 +35,51 @@ function CategoryTree({ node, path = [] }: { node: CategoryNode; path?: string[]
 function NotesPageContent() {
   const [trees, setTrees] = useState<CategoryNode[]>([]);
   const [syncItems, setSyncItems] = useState<RecordingEntity[]>([]);
+  const previousStatusesRef = useRef<Map<string, RecordingEntity['status']>>(new Map());
 
   useEffect(() => {
-    void getNotes().then(setTrees);
+    const refreshNotes = async () => {
+      const nextTrees = await getNotes();
+      setTrees(nextTrees);
+    };
 
-    const refresh = () => {
-      void db.recordings
+    const refreshSyncItems = async () => {
+      const items = await db.recordings
         .orderBy('createdAt')
         .reverse()
         .limit(20)
-        .toArray()
-        .then(setSyncItems);
+        .toArray();
+
+      const nextStatuses = new Map(items.map((item) => [item.id, item.status]));
+      const hadNewProcessedItem = items.some((item) => {
+        const previousStatus = previousStatusesRef.current.get(item.id);
+        return item.status === 'processed' && previousStatus !== 'processed';
+      });
+      previousStatusesRef.current = nextStatuses;
+      setSyncItems(items);
+
+      if (hadNewProcessedItem) {
+        await refreshNotes();
+      }
     };
 
-    refresh();
-    const timer = setInterval(refresh, 10_000);
-    window.addEventListener('focus', refresh);
+    const refreshAll = () => {
+      void refreshSyncItems();
+      void refreshNotes();
+    };
+
+    void refreshAll();
+    const timer = setInterval(() => {
+      void refreshSyncItems();
+      void refreshNotes();
+    }, 15_000);
+    window.addEventListener('focus', refreshAll);
+    window.addEventListener(SYNC_JOB_COMPLETED_EVENT, refreshAll);
+
     return () => {
       clearInterval(timer);
-      window.removeEventListener('focus', refresh);
+      window.removeEventListener('focus', refreshAll);
+      window.removeEventListener(SYNC_JOB_COMPLETED_EVENT, refreshAll);
     };
   }, []);
 
@@ -62,6 +89,7 @@ function NotesPageContent() {
       <h1>Notes</h1>
       <section>
         <h2>Sync status</h2>
+        <p><small>Failed uploads or processing attempts remain visible here until they succeed or expire.</small></p>
         {syncItems.length === 0 ? <p>No local sync activity yet.</p> : (
           <ul>
             {syncItems.map((item) => (

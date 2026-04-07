@@ -19,6 +19,7 @@ const CLEANUP_POLICY = {
 } as const;
 
 const BG_SYNC_TAG = 'saynote-sync';
+export const SYNC_JOB_COMPLETED_EVENT = 'saynote:job-completed';
 let syncInFlight: Promise<void> | null = null;
 
 export async function queueRecording(userId: string, payload: {
@@ -188,6 +189,7 @@ async function pollJobStatus(id: string) {
         failedStage: undefined,
         lastError: undefined
       });
+      emitSyncJobCompleted({ recordingId: id, serverJobId: item.serverJobId });
       return;
     }
 
@@ -235,6 +237,11 @@ async function pollJobStatus(id: string) {
       statusUpdatedAt: new Date().toISOString()
     });
   }
+}
+
+function emitSyncJobCompleted(detail: { recordingId: string; serverJobId: string }) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(SYNC_JOB_COMPLETED_EVENT, { detail }));
 }
 
 async function cleanupSyncedRecords() {
