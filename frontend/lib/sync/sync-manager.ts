@@ -18,6 +18,9 @@ const CLEANUP_POLICY = {
   terminalFailureTtlMs: 7 * 24 * 60 * 60 * 1_000
 } as const;
 
+const BG_SYNC_TAG = 'saynote-sync';
+let syncInFlight: Promise<void> | null = null;
+
 export async function queueRecording(userId: string, payload: {
   audioBlob: Blob;
   mimeType: string;
@@ -39,27 +42,47 @@ export async function queueRecording(userId: string, payload: {
   });
 
   if (navigator.onLine) {
-    await runSync();
+    await triggerSyncNow();
+    return;
   }
+
+  await registerBackgroundSync();
 }
 
 export function startSyncLoop() {
   let timer: ReturnType<typeof setInterval> | undefined;
 
   const onOnline = () => {
-    void runSync();
+    void triggerSyncNow();
+  };
+
+  const onServiceWorkerMessage = (event: MessageEvent) => {
+    if (event.data?.type === 'saynote-sync-request') {
+      void triggerSyncNow();
+    }
   };
 
   window.addEventListener('online', onOnline);
   window.addEventListener('focus', onOnline);
-  timer = setInterval(() => void runSync(), 15_000);
-  void runSync();
+  navigator.serviceWorker?.addEventListener('message', onServiceWorkerMessage);
+  timer = setInterval(() => void triggerSyncNow(), 15_000);
+  void triggerSyncNow();
 
   return () => {
     window.removeEventListener('online', onOnline);
     window.removeEventListener('focus', onOnline);
+    navigator.serviceWorker?.removeEventListener('message', onServiceWorkerMessage);
     if (timer) clearInterval(timer);
   };
+}
+
+export async function triggerSyncNow() {
+  if (!syncInFlight) {
+    syncInFlight = runSync().finally(() => {
+      syncInFlight = null;
+    });
+  }
+  await syncInFlight;
 }
 
 async function runSync() {
@@ -87,6 +110,23 @@ async function runSync() {
     if (!item.serverJobId) continue;
     if (item.nextProcessingRetryAt && item.nextProcessingRetryAt > now) continue;
     await pollJobStatus(item.id);
+  }
+}
+
+async function registerBackgroundSync() {
+  if (typeof window === 'undefined') return false;
+  if (!('serviceWorker' in navigator)) return false;
+  if (!('SyncManager' in window)) return false;
+
+  try {
+    const registration = await navigator.serviceWorker.ready as ServiceWorkerRegistration & {
+      sync?: { register: (tag: string) => Promise<void> };
+    };
+    if (!registration.sync) return false;
+    await registration.sync.register(BG_SYNC_TAG);
+    return true;
+  } catch (_error) {
+    return false;
   }
 }
 
