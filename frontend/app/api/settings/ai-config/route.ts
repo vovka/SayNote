@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireUserId } from '@/lib/auth/session';
-import { store } from '@/lib/api/in-memory-store';
+import { getAIConfig, upsertAIConfig } from '@/lib/api/supabase-server';
 
 const schema = z.object({
   primaryProvider: z.string().min(1),
@@ -13,13 +13,29 @@ const schema = z.object({
 });
 
 export async function PUT(request: Request) {
-  const userId = await requireUserId();
-  const payload = schema.parse(await request.json());
-  store.setAIConfig(userId, payload);
-  return NextResponse.json({ ok: true });
+  try {
+    const userId = await requireUserId();
+    const payload = schema.parse(await request.json());
+    await upsertAIConfig(userId, payload);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    console.error('AI config update failed', error);
+    return NextResponse.json({ error: 'Invalid config payload' }, { status: 400 });
+  }
 }
 
 export async function GET() {
-  const userId = await requireUserId();
-  return NextResponse.json(store.getAIConfig(userId));
+  try {
+    const userId = await requireUserId();
+    return NextResponse.json(await getAIConfig(userId));
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    console.error('AI config fetch failed', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
 }

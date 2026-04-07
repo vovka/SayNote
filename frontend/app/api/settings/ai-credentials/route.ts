@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireUserId } from '@/lib/auth/session';
-import { encryptSecret } from '@/../backend/worker/security/encryption';
-import { store } from '@/lib/api/in-memory-store';
+import { upsertCredential } from '@/lib/api/supabase-server';
 
 const schema = z.object({
   provider: z.string().min(1),
@@ -10,10 +9,17 @@ const schema = z.object({
 });
 
 export async function PUT(request: Request) {
-  const userId = await requireUserId();
-  const payload = schema.parse(await request.json());
+  try {
+    const userId = await requireUserId();
+    const payload = schema.parse(await request.json());
 
-  await encryptSecret(payload.apiKey);
-  store.setCredential(userId, payload.provider);
-  return NextResponse.json({ ok: true, provider: payload.provider, apiKeyStored: true });
+    await upsertCredential(userId, payload.provider, payload.apiKey);
+    return NextResponse.json({ ok: true, provider: payload.provider, apiKeyStored: true });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    console.error('AI credential update failed', error);
+    return NextResponse.json({ error: 'Invalid credential payload' }, { status: 400 });
+  }
 }
