@@ -53,3 +53,14 @@ test('manifest icon files exist in public/', async () => {
     await access(absolutePath);
   }
 });
+
+
+test('manifest icon references stay within public/icons and are unique', () => {
+  const appManifest = manifest();
+  const srcs = appManifest.icons.map((icon) => icon.src);
+
+  assert.equal(new Set(srcs).size, srcs.length, 'manifest icon src entries should be unique');
+  for (const src of srcs) {
+    assert.match(src, /^\/icons\/.+\.png$/, `icon src must target png asset in /icons: ${src}`);
+  }
+});

@@ -27,3 +27,19 @@ test('sortCategoryTreeNewestFirst sorts notes newest-first recursively', () => {
   assert.deepEqual(sorted[0]?.notes.map((note) => note.id), ['n3', 'n2', 'n1']);
   assert.deepEqual(sorted[0]?.children[0]?.notes.map((note) => note.id), ['c2', 'c1']);
 });
+
+
+test('sortCategoryTreeNewestFirst falls back to note id ordering for same createdAt timestamp', () => {
+  const sorted = sortCategoryTreeNewestFirst([
+    {
+      id: 'root',
+      notes: [
+        { id: 'note-b', createdAt: '2026-04-07T12:00:00.000Z' },
+        { id: 'note-a', createdAt: '2026-04-07T12:00:00.000Z' }
+      ],
+      children: []
+    }
+  ]);
+
+  assert.deepEqual(sorted[0]?.notes.map((note) => note.id), ['note-b', 'note-a']);
+});
