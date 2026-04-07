@@ -2,6 +2,8 @@
 
 This repository implements the Voice Notes PWA architecture from `docs/voice-notes-pwa-spec.md` with:
 
+Installability validation steps are documented in `docs/pwa-installability-checklist.md`.
+
 - Mobile-first one-tap recording UI (`/`)
 - Offline-first queue using IndexedDB + Dexie
 - Automatic foreground sync with retry/backoff and idempotency key support
