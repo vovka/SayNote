@@ -23,7 +23,7 @@ create table if not exists processing_jobs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
   client_recording_id text not null,
-  idempotency_key text not null unique,
+  idempotency_key text not null,
   status text not null,
   audio_storage_key text,
   audio_mime_type text not null,
@@ -36,7 +36,8 @@ create table if not exists processing_jobs (
   categorization_model text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  completed_at timestamptz
+  completed_at timestamptz,
+  unique (user_id, idempotency_key)
 );
 
 create table if not exists notes (
