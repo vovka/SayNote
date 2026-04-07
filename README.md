@@ -169,6 +169,32 @@ Alert thresholds:
 
 ## 9) Local Development
 
+### Run with Docker
+
+#### Development mode (hot reload)
+
+1. Build and start the container:
+
+```bash
+docker compose up --build
+```
+
+2. Open `http://localhost:3000`.
+3. Stop with `Ctrl+C` (or run `docker compose down` in another terminal).
+
+The compose setup mounts your local repository into `/app`, so frontend code changes reload automatically.
+
+#### Production-like mode (optional)
+
+If you want to run the production image locally:
+
+```bash
+docker build -t saynote:local --target runner .
+docker run --rm -p 3000:3000 -e NEXT_PUBLIC_BASE_URL=http://localhost:3000 saynote:local
+```
+
+### Run without Docker
+
 ```bash
 npm install
 npm run -w frontend dev
