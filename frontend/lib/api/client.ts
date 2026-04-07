@@ -1,4 +1,6 @@
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
+import type { AIConfigResponse } from '@/lib/settings/ai-config-form';
+import type { AIProviderConfigInput } from '@/../shared/types/model-policy';
 
 async function authFetch(input: RequestInfo | URL, init?: RequestInit) {
   const supabase = getSupabaseBrowserClient();
@@ -34,15 +36,14 @@ export async function getNotes() {
   return response.json();
 }
 
-export async function putAIConfig(input: {
-  primaryProvider: string;
-  transcriptionModel: string;
-  categorizationModel: string;
-  fallbackProvider?: string;
-  fallbackTranscriptionModel?: string;
-  fallbackCategorizationModel?: string;
-  fallbackOnTerminalPrimaryFailure?: boolean;
-}) {
+
+export async function getAIConfig() {
+  const response = await authFetch('/api/settings/ai-config', { cache: 'no-store' });
+  if (!response.ok) throw new Error('Failed to load AI config');
+  return response.json() as Promise<AIConfigResponse>;
+}
+
+export async function putAIConfig(input: AIProviderConfigInput) {
   const response = await authFetch('/api/settings/ai-config', {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
