@@ -1,10 +1,9 @@
 import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { encryptSecret } from '@/../backend/worker/security/encryption';
+import { isSupportedProvider, type ValidatedAIProviderConfig } from '@/../shared/types/model-policy';
 
 type JobStatus = 'uploaded' | 'processing' | 'completed' | 'failed_retryable' | 'failed_terminal';
-
-const ALLOWED_AI_PROVIDERS = new Set(['groq', 'openrouter']);
 
 export type UploadJobRecord = {
   id: string;
@@ -164,14 +163,7 @@ export async function getJobForUser(jobId: string, userId: string) {
 
 export async function upsertAIConfig(
   userId: string,
-  config: {
-    primaryProvider: string;
-    transcriptionModel: string;
-    categorizationModel: string;
-    fallbackProvider?: string;
-    fallbackTranscriptionModel?: string;
-    fallbackCategorizationModel?: string;
-  }
+  config: ValidatedAIProviderConfig
 ) {
   const supabase = getSupabase();
   const { error } = await supabase.from('user_ai_config').upsert(
@@ -182,7 +174,8 @@ export async function upsertAIConfig(
       categorization_model: config.categorizationModel,
       fallback_provider: config.fallbackProvider ?? null,
       fallback_transcription_model: config.fallbackTranscriptionModel ?? null,
-      fallback_categorization_model: config.fallbackCategorizationModel ?? null
+      fallback_categorization_model: config.fallbackCategorizationModel ?? null,
+      fallback_on_terminal_primary_failure: config.fallbackOnTerminalPrimaryFailure
     },
     { onConflict: 'user_id' }
   );
@@ -195,7 +188,7 @@ export async function getAIConfig(userId: string) {
   const [configResult, credsResult] = await Promise.all([
     supabase
       .from('user_ai_config')
-      .select('primary_provider,transcription_model,categorization_model,fallback_provider,fallback_transcription_model,fallback_categorization_model')
+      .select('primary_provider,transcription_model,categorization_model,fallback_provider,fallback_transcription_model,fallback_categorization_model,fallback_on_terminal_primary_failure')
       .eq('user_id', userId)
       .maybeSingle(),
     supabase.from('user_ai_credentials').select('provider').eq('user_id', userId)
@@ -212,13 +205,14 @@ export async function getAIConfig(userId: string) {
     fallbackProvider: config?.fallback_provider ?? null,
     fallbackTranscriptionModel: config?.fallback_transcription_model ?? null,
     fallbackCategorizationModel: config?.fallback_categorization_model ?? null,
+    fallbackOnTerminalPrimaryFailure: config?.fallback_on_terminal_primary_failure ?? false,
     providersWithKey: (credsResult.data ?? []).map((row) => row.provider)
   };
 }
 
 export async function upsertCredential(userId: string, provider: string, apiKey: string) {
   const normalizedProvider = provider.trim().toLowerCase();
-  if (!ALLOWED_AI_PROVIDERS.has(normalizedProvider)) {
+  if (!isSupportedProvider(normalizedProvider)) {
     throw new Error('Unsupported provider');
   }
 

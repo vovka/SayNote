@@ -21,6 +21,7 @@ export interface UserAIConfigRow {
   fallback_provider: string | null;
   fallback_transcription_model: string | null;
   fallback_categorization_model: string | null;
+  fallback_on_terminal_primary_failure: boolean;
 }
 
 export interface UserAICredentialRow {
@@ -81,7 +82,8 @@ export async function loadJobDependencies(client: PoolClient, userId: string) {
   const [configResult, credentialResult] = await Promise.all([
     client.query<UserAIConfigRow>(
       `select user_id, primary_provider, transcription_model, categorization_model,
-              fallback_provider, fallback_transcription_model, fallback_categorization_model
+              fallback_provider, fallback_transcription_model, fallback_categorization_model,
+              fallback_on_terminal_primary_failure
        from user_ai_config
        where user_id = $1`,
       [userId]
