@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 const R2_ALLOWED_MIME_TYPES = new Set(['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav']);
@@ -111,6 +111,12 @@ function extensionForMimeType(mimeType: string) {
 export function buildTemporaryAudioStorageKey(userId: string, clientRecordingId: string, mimeType: string) {
   const extension = extensionForMimeType(mimeType);
   return `audio/${userId}/${clientRecordingId}/${randomUUID()}.${extension}`;
+}
+
+export function buildIdempotentTemporaryAudioStorageKey(userId: string, idempotencyKey: string, mimeType: string) {
+  const extension = extensionForMimeType(mimeType);
+  const normalizedKey = createHash('sha256').update(idempotencyKey).digest('hex');
+  return `audio/${userId}/idempotency/${normalizedKey}.${extension}`;
 }
 
 export async function putTemporaryAudio(storageKey: string, bytes: Uint8Array, mimeType: string) {

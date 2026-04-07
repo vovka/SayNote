@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { S3Client } from '@aws-sdk/client-s3';
-import { deleteTemporaryAudio, getTemporaryAudio, isR2ReadError } from './r2.ts';
+import {
+  buildIdempotentTemporaryAudioStorageKey,
+  deleteTemporaryAudio,
+  getTemporaryAudio,
+  isR2ReadError
+} from './r2.ts';
 
 const ORIGINAL_SEND = S3Client.prototype.send;
 
@@ -71,9 +76,10 @@ test('getTemporaryAudio maps transport failures to retryable R2ReadError', async
 
 test('deleteTemporaryAudio issues delete for object key', async () => {
   setStorageEnv();
-  let capturedCommand: { constructor: { name: string }; input: { Bucket: string; Key: string } } | null = null;
+  type CapturedCommand = { constructor: { name: string }; input: { Bucket: string; Key: string } };
+  let capturedCommand: CapturedCommand | null = null;
   S3Client.prototype.send = async (command) => {
-    capturedCommand = command as typeof capturedCommand;
+    capturedCommand = command as CapturedCommand;
     return {} as never;
   };
 
@@ -84,4 +90,14 @@ test('deleteTemporaryAudio issues delete for object key', async () => {
   assert.ok(capturedCommand);
   assert.equal(capturedCommand.constructor.name, 'DeleteObjectCommand');
   assert.deepEqual(capturedCommand.input, { Bucket: 'test-bucket', Key: 'audio/user/to-delete.webm' });
+});
+
+test('buildIdempotentTemporaryAudioStorageKey is deterministic per idempotency key', () => {
+  const first = buildIdempotentTemporaryAudioStorageKey('user-1', 'idempotency-key', 'audio/webm');
+  const second = buildIdempotentTemporaryAudioStorageKey('user-1', 'idempotency-key', 'audio/webm');
+  const different = buildIdempotentTemporaryAudioStorageKey('user-1', 'different', 'audio/webm');
+
+  assert.equal(first, second);
+  assert.notEqual(first, different);
+  assert.match(first, /^audio\/user-1\/idempotency\/[a-f0-9]{64}\.webm$/);
 });
