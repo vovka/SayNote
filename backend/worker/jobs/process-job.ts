@@ -13,6 +13,17 @@ interface ProcessingAttempt {
   categorizationModel: string;
 }
 
+async function decryptProviderApiKey(
+  credentialsByProvider: Map<string, { encrypted_api_key: string }>,
+  provider: string
+) {
+  const credential = credentialsByProvider.get(provider);
+  if (!credential) {
+    throw new Error(`AI credential missing for provider ${provider}`);
+  }
+  return decryptSecretForWorker(credential.encrypted_api_key);
+}
+
 function getAttempts(config: {
   primary_provider: string;
   transcription_model: string;
@@ -88,14 +99,9 @@ export async function processJob(client: PoolClient, job: ProcessingJobRow) {
 
     for (let index = 0; index < attempts.length; index += 1) {
       const attempt = attempts[index];
-      const credential = credentialsByProvider.get(attempt.provider);
-      if (!credential) {
-        lastFailure = new Error(`AI credential missing for provider ${attempt.provider}`);
-        break;
-      }
 
       try {
-        const apiKey = await decryptSecretForWorker(credential.encrypted_api_key);
+        const apiKey = await decryptProviderApiKey(credentialsByProvider, attempt.provider);
         const adapter = getProvider(attempt.provider);
 
         const transcription = await adapter.transcribe({
