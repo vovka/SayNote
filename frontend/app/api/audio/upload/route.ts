@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { requireUserId } from '@/lib/auth/session';
-import { createUploadJob, getUploadJobByIdempotencyKey } from '@/lib/api/supabase-server';
-import { buildTemporaryAudioStorageKey, putTemporaryAudio } from '@/../backend/worker/storage/r2';
+import { createUploadJob } from '@/lib/api/supabase-server';
+import {
+  buildIdempotentTemporaryAudioStorageKey,
+  deleteTemporaryAudio,
+  putTemporaryAudio
+} from '@/../backend/worker/storage/r2';
 
 const ALLOWED_MIME_TYPES = new Set(['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav']);
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -39,6 +43,10 @@ function toAcceptedResponse(job: {
   };
 }
 
+function invalidPayload(message: string, status = 400) {
+  return NextResponse.json({ error: message, code: 'INVALID_PAYLOAD' }, { status });
+}
+
 export async function POST(request: Request) {
   try {
     const userId = await requireUserId(request);
@@ -50,41 +58,50 @@ export async function POST(request: Request) {
     const uploadedAudio = formData.get('audio') ?? formData.get('file');
 
     if (!idempotencyKey || !clientRecordingId) {
-      return NextResponse.json({ error: 'Missing idempotency key or recording id' }, { status: 400 });
-    }
-
-    const existing = await getUploadJobByIdempotencyKey(userId, idempotencyKey);
-    if (existing) {
-      return NextResponse.json(toAcceptedResponse(existing));
+      return invalidPayload('Missing idempotency key or recording id');
     }
 
     if (!(uploadedAudio instanceof File)) {
-      return NextResponse.json({ error: 'Missing multipart audio file' }, { status: 400 });
+      return invalidPayload('Missing multipart audio file');
     }
 
     const mimeType = uploadedAudio.type || 'application/octet-stream';
     if (!ALLOWED_MIME_TYPES.has(mimeType)) {
-      return NextResponse.json({ error: 'Unsupported audio type' }, { status: 415 });
+      return invalidPayload('Unsupported audio type', 415);
     }
 
     if (uploadedAudio.size > MAX_UPLOAD_BYTES) {
-      return NextResponse.json({ error: 'Audio file too large' }, { status: 413 });
+      return invalidPayload('Audio file too large', 413);
     }
 
     const audioBytes = new Uint8Array(await uploadedAudio.arrayBuffer());
-    const storageKey = buildTemporaryAudioStorageKey(userId, clientRecordingId, mimeType);
+    const storageKey = buildIdempotentTemporaryAudioStorageKey(userId, idempotencyKey, mimeType);
     await putTemporaryAudio(storageKey, audioBytes, mimeType);
 
-    const job = await createUploadJob({
-      userId,
-      idempotencyKey,
-      clientRecordingId,
-      mimeType,
-      durationMs,
-      audioStorageKey: storageKey
-    });
+    try {
+      const job = await createUploadJob({
+        userId,
+        idempotencyKey,
+        clientRecordingId,
+        mimeType,
+        durationMs,
+        audioStorageKey: storageKey
+      });
 
-    return NextResponse.json(toAcceptedResponse(job));
+      const response = toAcceptedResponse(job);
+      if (job.wasDuplicate) {
+        return NextResponse.json({ ...response, code: 'IDEMPOTENT_REPLAY' });
+      }
+
+      return NextResponse.json({ ...response, code: 'UPLOAD_ACCEPTED' });
+    } catch (dbError) {
+      try {
+        await deleteTemporaryAudio(storageKey);
+      } catch (cleanupError) {
+        console.warn('Failed to rollback uploaded audio object after DB failure', cleanupError);
+      }
+      throw dbError;
+    }
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
