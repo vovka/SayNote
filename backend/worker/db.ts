@@ -18,6 +18,9 @@ export interface UserAIConfigRow {
   primary_provider: string;
   transcription_model: string;
   categorization_model: string;
+  fallback_provider: string | null;
+  fallback_transcription_model: string | null;
+  fallback_categorization_model: string | null;
 }
 
 export interface UserAICredentialRow {
@@ -77,7 +80,8 @@ export async function claimJobs(limit: number): Promise<ProcessingJobRow[]> {
 export async function loadJobDependencies(client: PoolClient, userId: string) {
   const [configResult, credentialResult] = await Promise.all([
     client.query<UserAIConfigRow>(
-      `select user_id, primary_provider, transcription_model, categorization_model
+      `select user_id, primary_provider, transcription_model, categorization_model,
+              fallback_provider, fallback_transcription_model, fallback_categorization_model
        from user_ai_config
        where user_id = $1`,
       [userId]
@@ -95,12 +99,15 @@ export async function loadJobDependencies(client: PoolClient, userId: string) {
     throw new Error('AI configuration missing for user');
   }
 
-  const credential = credentialResult.rows.find((row) => row.provider === config.primary_provider);
-  if (!credential) {
+  const credentialsByProvider = new Map<string, UserAICredentialRow>(
+    credentialResult.rows.map((row: UserAICredentialRow) => [row.provider, row])
+  );
+  const primaryCredential = credentialsByProvider.get(config.primary_provider);
+  if (!primaryCredential) {
     throw new Error(`AI credential missing for provider ${config.primary_provider}`);
   }
 
-  return { config, credential };
+  return { config, credentialsByProvider };
 }
 
 export async function markJobFailed(
