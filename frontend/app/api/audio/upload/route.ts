@@ -9,6 +9,8 @@ import {
 } from '@/../backend/worker/storage/r2';
 
 import { validateUploadInvariants } from '@/lib/api/upload-invariants';
+import { parseClientCreatedAt } from '@/lib/api/upload-created-at';
+
 
 function parseDurationMs(raw: FormDataEntryValue | null) {
   const parsed = Number(raw ?? 0);
@@ -23,6 +25,7 @@ function toAcceptedResponse(job: {
   audioStorageKey: string | null;
   audioMimeType: string;
   audioDurationMs: number | null;
+  clientCreatedAt: string;
   createdAt: string;
   updatedAt: string;
 }) {
@@ -37,6 +40,7 @@ function toAcceptedResponse(job: {
       audio_storage_key: job.audioStorageKey,
       audio_mime_type: job.audioMimeType,
       audio_duration_ms: job.audioDurationMs,
+      client_created_at: job.clientCreatedAt,
       created_at: job.createdAt,
       updated_at: job.updatedAt
     }
@@ -55,10 +59,15 @@ export async function POST(request: Request) {
     const idempotencyKey = String(formData.get('idempotencyKey') ?? '').trim();
     const clientRecordingId = String(formData.get('clientRecordingId') ?? '').trim();
     const durationMs = parseDurationMs(formData.get('durationMs'));
+    const clientCreatedAt = parseClientCreatedAt(formData.get('createdAt'));
     const uploadedAudio = formData.get('audio') ?? formData.get('file');
 
     if (!idempotencyKey || !clientRecordingId) {
       return invalidPayload('Missing idempotency key or recording id');
+    }
+
+    if (!clientCreatedAt) {
+      return invalidPayload('Missing or invalid createdAt (must be ISO-8601 with timezone)');
     }
 
     if (!(uploadedAudio instanceof File)) {
@@ -82,6 +91,7 @@ export async function POST(request: Request) {
         clientRecordingId,
         mimeType,
         durationMs,
+        clientCreatedAt,
         audioStorageKey: storageKey
       });
 

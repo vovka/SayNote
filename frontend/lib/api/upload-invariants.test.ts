@@ -10,6 +10,7 @@ const SAMPLE_JOB = {
   audioStorageKey: 'audio/user-1/idempotency/a.webm',
   audioMimeType: 'audio/webm',
   audioDurationMs: 1000,
+  clientCreatedAt: '2025-12-31T23:59:58.000Z',
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z'
 };
@@ -41,6 +42,7 @@ test('createIdempotentUploadJob returns existing job on duplicate', async () => 
   });
 
   assert.equal(result.id, SAMPLE_JOB.id);
+  assert.equal(result.clientCreatedAt, SAMPLE_JOB.clientCreatedAt);
   assert.equal(result.wasDuplicate, true);
 });
 

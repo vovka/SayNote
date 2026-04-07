@@ -14,6 +14,7 @@ export type UploadJobRecord = {
   audioStorageKey: string | null;
   audioMimeType: string;
   audioDurationMs: number | null;
+  clientCreatedAt: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -50,6 +51,7 @@ function mapUploadJob(data: Record<string, unknown>): UploadJobRecord {
     audioStorageKey: (data.audio_storage_key as string | null) ?? null,
     audioMimeType: data.audio_mime_type as string,
     audioDurationMs: (data.audio_duration_ms as number | null) ?? null,
+    clientCreatedAt: data.client_created_at as string,
     createdAt: data.created_at as string,
     updatedAt: data.updated_at as string
   };
@@ -100,7 +102,7 @@ export async function getUploadJobByIdempotencyKey(userId: string, idempotencyKe
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('processing_jobs')
-    .select('id,status,client_recording_id,idempotency_key,audio_storage_key,audio_mime_type,audio_duration_ms,created_at,updated_at')
+    .select('id,status,client_recording_id,idempotency_key,audio_storage_key,audio_mime_type,audio_duration_ms,client_created_at,created_at,updated_at')
     .eq('user_id', userId)
     .eq('idempotency_key', idempotencyKey)
     .maybeSingle();
@@ -116,6 +118,7 @@ export async function createUploadJob(input: {
   clientRecordingId: string;
   mimeType: string;
   durationMs: number;
+  clientCreatedAt: string;
   audioStorageKey: string;
 }) {
   const supabase = getSupabase();
@@ -127,7 +130,8 @@ export async function createUploadJob(input: {
     status: 'uploaded' as JobStatus,
     audio_storage_key: input.audioStorageKey,
     audio_mime_type: input.mimeType,
-    audio_duration_ms: input.durationMs
+    audio_duration_ms: input.durationMs,
+    client_created_at: input.clientCreatedAt
   };
 
   return createIdempotentUploadJob({
@@ -135,7 +139,7 @@ export async function createUploadJob(input: {
       const { data, error } = await supabase
         .from('processing_jobs')
         .insert(payload)
-        .select('id,status,client_recording_id,idempotency_key,audio_storage_key,audio_mime_type,audio_duration_ms,created_at,updated_at')
+        .select('id,status,client_recording_id,idempotency_key,audio_storage_key,audio_mime_type,audio_duration_ms,client_created_at,created_at,updated_at')
         .single();
 
       if (error) {
