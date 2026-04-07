@@ -1,6 +1,11 @@
 import { db } from '@/lib/db/indexeddb';
 import { getJob, uploadAudio } from '@/lib/api/client';
-import { pickProcessingQueue, pickUploadQueue } from '@/lib/sync/sync-core';
+import {
+  pickProcessingQueue,
+  pickStaleProcessingRecoveryQueue,
+  pickStaleUploadRecoveryQueue,
+  pickUploadQueue
+} from '@/lib/sync/sync-core';
 
 const UPLOAD_RETRY_POLICY = {
   maxRetries: 8,
@@ -21,6 +26,8 @@ const CLEANUP_POLICY = {
 
 const BG_SYNC_TAG = 'saynote-sync';
 export const SYNC_JOB_COMPLETED_EVENT = 'saynote:job-completed';
+export const UPLOADING_STALE_MS = 2 * 60 * 1_000;
+export const PROCESSING_STALE_MS = 2 * 60 * 1_000;
 let syncInFlight: Promise<void> | null = null;
 
 export async function queueRecording(userId: string, payload: {
@@ -89,6 +96,7 @@ export async function triggerSyncNow() {
 
 async function runSync() {
   if (!navigator.onLine) return;
+  await recoverStaleSyncState();
   await cleanupSyncedRecords();
 
   const now = new Date().toISOString();
@@ -107,6 +115,31 @@ async function runSync() {
     .toArray();
   for (const item of pickProcessingQueue(processingQueue, now)) {
     await pollJobStatus(item.id);
+  }
+}
+
+export async function recoverStaleSyncState(nowIso = new Date().toISOString()) {
+  const uploadRecoveryCandidates = await db.recordings.where('status').equals('uploading').toArray();
+  for (const item of pickStaleUploadRecoveryQueue(uploadRecoveryCandidates, nowIso, UPLOADING_STALE_MS)) {
+    await db.recordings.update(item.id, {
+      status: 'queued_upload',
+      failedStage: undefined,
+      lastError: undefined,
+      nextUploadRetryAt: undefined,
+      statusUpdatedAt: nowIso
+    });
+  }
+
+  const processingRecoveryCandidates = await db.recordings
+    .where('status')
+    .anyOf('uploaded_waiting_processing', 'failed_retryable')
+    .toArray();
+
+  for (const item of pickStaleProcessingRecoveryQueue(processingRecoveryCandidates, nowIso, PROCESSING_STALE_MS)) {
+    await db.recordings.update(item.id, {
+      nextProcessingRetryAt: nowIso,
+      statusUpdatedAt: nowIso
+    });
   }
 }
 

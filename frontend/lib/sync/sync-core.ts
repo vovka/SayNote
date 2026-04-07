@@ -5,6 +5,28 @@ export interface SyncRecording {
   nextUploadRetryAt?: string;
   nextProcessingRetryAt?: string;
   serverJobId?: string;
+  statusUpdatedAt?: string;
+}
+
+function isStale(statusUpdatedAt: string | undefined, nowMs: number, staleMs: number) {
+  if (!statusUpdatedAt) return false;
+  const updatedAtMs = Date.parse(statusUpdatedAt);
+  if (Number.isNaN(updatedAtMs)) return false;
+  return nowMs - updatedAtMs > staleMs;
+}
+
+export function pickStaleUploadRecoveryQueue(items: SyncRecording[], nowIso: string, staleMs: number) {
+  const nowMs = Date.parse(nowIso);
+  return items.filter((item) => item.status === 'uploading' && isStale(item.statusUpdatedAt, nowMs, staleMs));
+}
+
+export function pickStaleProcessingRecoveryQueue(items: SyncRecording[], nowIso: string, staleMs: number) {
+  const nowMs = Date.parse(nowIso);
+  return items.filter((item) => {
+    if (!item.serverJobId || !isStale(item.statusUpdatedAt, nowMs, staleMs)) return false;
+    if (item.status === 'uploaded_waiting_processing') return true;
+    return item.status === 'failed_retryable' && item.failedStage === 'processing';
+  });
 }
 
 export function pickUploadQueue(items: SyncRecording[], nowIso: string) {

@@ -14,6 +14,10 @@ Validated scenarios:
    - Retryable upload/process failures back off and are retried by foreground sync.
 4. Service worker update lifecycle.
    - New worker pre-caches app shell routes, claims clients on activation, and prunes stale versioned caches.
+5. Crash/restart stale-state recovery.
+   - `uploading` entries older than the stale timeout are moved back to `queued_upload` while preserving the same idempotency key.
+   - Stale processing states (`uploaded_waiting_processing` and processing-stage retryables with `serverJobId`) are re-scheduled immediately by setting `nextProcessingRetryAt` to "now".
+   - Recovery runs inside the same single-flight sync guard used by normal sync cycles to prevent duplicate race-triggered work after restart.
 
 ## Caching strategy
 
