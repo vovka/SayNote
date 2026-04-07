@@ -4,6 +4,18 @@ import { encryptSecret } from '@/../backend/worker/security/encryption';
 
 type JobStatus = 'uploaded' | 'processing' | 'completed' | 'failed_retryable' | 'failed_terminal';
 
+export type UploadJobRecord = {
+  id: string;
+  status: JobStatus;
+  clientRecordingId: string;
+  idempotencyKey: string;
+  audioStorageKey: string | null;
+  audioMimeType: string;
+  audioDurationMs: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 function getSupabase() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -15,12 +27,41 @@ function getSupabase() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-export async function upsertUploadJob(input: {
+function mapUploadJob(data: Record<string, unknown>): UploadJobRecord {
+  return {
+    id: data.id as string,
+    status: data.status as JobStatus,
+    clientRecordingId: data.client_recording_id as string,
+    idempotencyKey: data.idempotency_key as string,
+    audioStorageKey: (data.audio_storage_key as string | null) ?? null,
+    audioMimeType: data.audio_mime_type as string,
+    audioDurationMs: (data.audio_duration_ms as number | null) ?? null,
+    createdAt: data.created_at as string,
+    updatedAt: data.updated_at as string
+  };
+}
+
+export async function getUploadJobByIdempotencyKey(userId: string, idempotencyKey: string) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('processing_jobs')
+    .select('id,status,client_recording_id,idempotency_key,audio_storage_key,audio_mime_type,audio_duration_ms,created_at,updated_at')
+    .eq('user_id', userId)
+    .eq('idempotency_key', idempotencyKey)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+  return mapUploadJob(data as Record<string, unknown>);
+}
+
+export async function createUploadJob(input: {
   userId: string;
   idempotencyKey: string;
   clientRecordingId: string;
   mimeType: string;
   durationMs: number;
+  audioStorageKey: string;
 }) {
   const supabase = getSupabase();
 
@@ -29,23 +70,28 @@ export async function upsertUploadJob(input: {
     client_recording_id: input.clientRecordingId,
     idempotency_key: input.idempotencyKey,
     status: 'uploaded' as JobStatus,
-    audio_storage_key: `temp/${input.userId}/${input.clientRecordingId}.webm`,
+    audio_storage_key: input.audioStorageKey,
     audio_mime_type: input.mimeType,
     audio_duration_ms: input.durationMs
   };
 
   const { data, error } = await supabase
     .from('processing_jobs')
-    .upsert(payload, { onConflict: 'user_id,idempotency_key' })
-    .select('id,status')
+    .insert(payload)
+    .select('id,status,client_recording_id,idempotency_key,audio_storage_key,audio_mime_type,audio_duration_ms,created_at,updated_at')
     .single();
 
-  if (error) throw error;
+  if (error) {
+    if (error.code === '23505') {
+      const existing = await getUploadJobByIdempotencyKey(input.userId, input.idempotencyKey);
+      if (existing) {
+        return { ...existing, wasDuplicate: true as const };
+      }
+    }
+    throw error;
+  }
 
-  return {
-    id: data.id as string,
-    status: data.status as JobStatus
-  };
+  return { ...mapUploadJob(data as Record<string, unknown>), wasDuplicate: false as const };
 }
 
 export async function getJobForUser(jobId: string, userId: string) {
