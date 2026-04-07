@@ -176,6 +176,7 @@ Recommended:
 - Upload retries happen automatically
 - Temporary failures do not require manual action
 - Duplicate note creation is prevented through idempotency design
+- Browser behavior and offline validation scenarios are documented in `docs/offline-sync-browser-support.md`
 
 ---
 
