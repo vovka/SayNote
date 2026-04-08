@@ -66,6 +66,11 @@ async function handleNavigationRequest(request) {
 }
 
 async function handleRuntimeRequest(request) {
+  const requestUrl = new URL(request.url);
+  if (shouldBypassRuntimeCache(request, requestUrl)) {
+    return fetch(request);
+  }
+
   const cache = await caches.open(RUNTIME_CACHE);
   const cached = await cache.match(request);
   const fetchPromise = fetch(request)
@@ -85,6 +90,10 @@ async function handleRuntimeRequest(request) {
   const fresh = await fetchPromise;
   if (fresh) return fresh;
   return new Response('Offline resource unavailable', { status: 503 });
+}
+
+function shouldBypassRuntimeCache(request, requestUrl) {
+  return requestUrl.pathname.startsWith('/api/') || request.headers.has('authorization');
 }
 
 async function notifyClientsToSync() {
