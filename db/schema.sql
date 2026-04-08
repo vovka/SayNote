@@ -15,8 +15,7 @@ create table if not exists categories (
   name text not null,
   path_cache text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (user_id, parent_id, name)
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists processing_jobs (
@@ -77,6 +76,15 @@ create table if not exists user_ai_config (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table categories drop constraint if exists categories_user_id_parent_id_name_key;
+
+create unique index if not exists categories_user_parent_name_unique_idx
+  on categories (user_id, parent_id, name) nulls not distinct;
+
+create index if not exists categories_user_id_idx on categories (user_id);
+create index if not exists processing_jobs_user_id_idx on processing_jobs (user_id);
+create index if not exists notes_user_id_idx on notes (user_id);
 
 alter table user_profiles enable row level security;
 alter table categories enable row level security;
