@@ -65,6 +65,19 @@ Required variables:
 - `R2_BUCKET`
 - `R2_ENDPOINT` (if required by your R2 setup)
 
+Initialize the database before starting the app:
+
+```bash
+npm run db:bootstrap
+```
+
+For later schema changes on an existing database:
+
+```bash
+npm run db:migrate
+npm run db:migrate:status
+```
+
 ---
 
 ## Local Run Commands (Exact)

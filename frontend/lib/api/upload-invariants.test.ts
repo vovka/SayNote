@@ -23,6 +23,14 @@ test('validateUploadInvariants rejects unsupported MIME types', () => {
   }
 });
 
+test('validateUploadInvariants accepts codec-qualified audio and normalizes it', () => {
+  const result = validateUploadInvariants({ mimeType: 'audio/webm;codecs=opus', sizeBytes: 1024 });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.normalizedMimeType, 'audio/webm');
+  }
+});
+
 test('validateUploadInvariants rejects oversized uploads', () => {
   const result = validateUploadInvariants({ mimeType: 'audio/webm', sizeBytes: MAX_UPLOAD_BYTES + 1 });
   assert.equal(result.ok, false);

@@ -5,7 +5,13 @@ import type {
   UnifiedCategorizationRequest,
   UnifiedRecategorization
 } from '../../../shared/types/provider';
-import { mapHttpFailure, mapInvalidResponse, mapNetworkFailure, ProviderError } from './errors';
+import {
+  mapHttpFailure,
+  mapInvalidResponse,
+  mapNetworkFailure,
+  ProviderError,
+  type ProviderErrorOptions
+} from './errors';
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
@@ -43,7 +49,7 @@ function parseMessageContent(body: JsonRecord) {
   return typeof content === 'string' ? content : undefined;
 }
 
-function normalizeAssignment(raw: unknown, operation: string) {
+function normalizeAssignment(raw: unknown, operation: ProviderErrorOptions['operation']) {
   if (!raw || typeof raw !== 'object') {
     throw mapInvalidResponse({ provider: 'openrouter', operation, reason: 'assignment must be an object' });
   }

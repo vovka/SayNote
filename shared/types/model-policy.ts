@@ -1,5 +1,5 @@
 export type SupportedProvider = 'groq' | 'openrouter';
-export type ProviderOperation = 'transcribe' | 'categorize';
+export type ProviderOperation = 'transcribe' | 'categorizeWithReview';
 
 export interface ProviderModelPolicy {
   transcription: readonly string[];
@@ -101,13 +101,13 @@ export function validateAIProviderConfig(input: AIProviderConfigInput):
     };
   }
 
-  if (!isSupportedModel(primaryProvider, 'categorize', categorizationModel)) {
+  if (!isSupportedModel(primaryProvider, 'categorizeWithReview', categorizationModel)) {
     return {
       ok: false,
       error: {
         code: 'UNSUPPORTED_MODEL_COMBINATION',
         provider: primaryProvider,
-        operation: 'categorize',
+        operation: 'categorizeWithReview',
         message: `Model ${categorizationModel} is not supported for ${primaryProvider} categorization`
       }
     };
@@ -154,13 +154,17 @@ export function validateAIProviderConfig(input: AIProviderConfigInput):
     };
   }
 
-  if (fallbackProviderRaw && fallbackCategorizationModel && !isSupportedModel(fallbackProviderRaw, 'categorize', fallbackCategorizationModel)) {
+  if (
+    fallbackProviderRaw &&
+    fallbackCategorizationModel &&
+    !isSupportedModel(fallbackProviderRaw, 'categorizeWithReview', fallbackCategorizationModel)
+  ) {
     return {
       ok: false,
       error: {
         code: 'UNSUPPORTED_MODEL_COMBINATION',
         provider: fallbackProviderRaw,
-        operation: 'categorize',
+        operation: 'categorizeWithReview',
         message: `Model ${fallbackCategorizationModel} is not supported for ${fallbackProviderRaw} categorization`
       }
     };

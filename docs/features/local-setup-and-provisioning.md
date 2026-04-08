@@ -17,6 +17,7 @@ Capture the actual setup contract from code so local environment provisioning do
 - `frontend/app/settings/page.tsx`: users store Groq/OpenRouter keys after signing in.
 - `shared/types/model-policy.ts`: supported providers are `groq` and `openrouter`.
 - `db/schema.sql`: Supabase/Postgres schema and RLS policies.
+- `backend/scripts/db.js`: database bootstrap/migration runner using `DATABASE_URL`.
 
 ## Core Concepts
 - The web app is gated behind auth, so Supabase Auth must work before normal local use.
@@ -41,6 +42,7 @@ Capture the actual setup contract from code so local environment provisioning do
 - Code also requires `SUPABASE_URL` for server API routes even though `.env.example` only lists the public URL.
 - `R2_ENDPOINT` exists in docs/env example but `backend/worker/storage/r2.ts` ignores it and always builds the Cloudflare endpoint from `R2_ACCOUNT_ID`.
 - AI provider API keys are entered later in `/settings` after successful sign-in.
+- Fresh local databases should be initialized with `npm run db:bootstrap`; later incremental changes should use `npm run db:migrate`.
 
 ## Testing Strategy
 - Validate sign-in flow at `/signin` and `/auth/callback`.

@@ -74,12 +74,13 @@ export async function POST(request: Request) {
       return invalidPayload('Missing multipart audio file');
     }
 
-    const mimeType = uploadedAudio.type || 'application/octet-stream';
-    const invariantResult = validateUploadInvariants({ mimeType, sizeBytes: uploadedAudio.size });
+    const rawMimeType = uploadedAudio.type || String(formData.get('mimeType') ?? '').trim() || 'application/octet-stream';
+    const invariantResult = validateUploadInvariants({ mimeType: rawMimeType, sizeBytes: uploadedAudio.size });
     if (!invariantResult.ok) {
       return invalidPayload(invariantResult.message, invariantResult.status);
     }
 
+    const mimeType = invariantResult.normalizedMimeType;
     const audioBytes = new Uint8Array(await uploadedAudio.arrayBuffer());
     const storageKey = buildIdempotentTemporaryAudioStorageKey(userId, idempotencyKey, mimeType);
     await putTemporaryAudio(storageKey, audioBytes, mimeType);

@@ -5,7 +5,13 @@ import type {
   UnifiedCategorizationRequest,
   UnifiedRecategorization
 } from '../../../shared/types/provider';
-import { mapHttpFailure, mapInvalidResponse, mapNetworkFailure, ProviderError } from './errors';
+import {
+  mapHttpFailure,
+  mapInvalidResponse,
+  mapNetworkFailure,
+  ProviderError,
+  type ProviderErrorOptions
+} from './errors';
 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 
@@ -35,7 +41,7 @@ function getTextFromCompletion(body: JsonRecord) {
   return typeof content === 'string' ? content : undefined;
 }
 
-function normalizeAssignment(raw: unknown, operation: string) {
+function normalizeAssignment(raw: unknown, operation: ProviderErrorOptions['operation']) {
   if (!raw || typeof raw !== 'object') {
     throw mapInvalidResponse({ provider: 'groq', operation, reason: 'assignment must be an object' });
   }
