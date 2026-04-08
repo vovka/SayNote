@@ -77,11 +77,19 @@ create table if not exists user_ai_config (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists ai_credential_update_attempts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  created_at timestamptz not null default now()
+);
+
 alter table categories drop constraint if exists categories_user_id_parent_id_name_key;
 
 create unique index if not exists categories_user_parent_name_unique_idx
   on categories (user_id, parent_id, name) nulls not distinct;
 
+create index if not exists ai_credential_update_attempts_user_id_created_at_idx
+  on ai_credential_update_attempts (user_id, created_at desc);
 create index if not exists categories_user_id_idx on categories (user_id);
 create index if not exists processing_jobs_user_id_idx on processing_jobs (user_id);
 create index if not exists notes_user_id_idx on notes (user_id);
@@ -90,6 +98,7 @@ alter table user_profiles enable row level security;
 alter table categories enable row level security;
 alter table processing_jobs enable row level security;
 alter table notes enable row level security;
+alter table ai_credential_update_attempts enable row level security;
 alter table user_ai_credentials enable row level security;
 alter table user_ai_config enable row level security;
 

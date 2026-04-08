@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireUserId } from '@/lib/auth/session';
-import { upsertCredential } from '@/lib/api/supabase-server';
+import { checkCredentialUpdateRateLimit, upsertCredential } from '@/lib/api/supabase-server';
 import { mapErrorCode, scrubSensitiveFields } from '@/lib/api/safe-logging';
 
 const ALLOWED_PROVIDERS = new Set(['groq', 'openrouter']);
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_UPDATES = 5;
-const credentialUpdatesByUser = new Map<string, number[]>();
 
 const schema = z.object({
   provider: z
@@ -18,23 +15,10 @@ const schema = z.object({
   apiKey: z.string().min(8)
 });
 
-function checkUserRateLimit(userId: string) {
-  const now = Date.now();
-  const recent = (credentialUpdatesByUser.get(userId) ?? []).filter((timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS);
-
-  if (recent.length >= RATE_LIMIT_MAX_UPDATES) {
-    return { allowed: false as const, retryAfterSeconds: Math.ceil((RATE_LIMIT_WINDOW_MS - (now - recent[0])) / 1000) };
-  }
-
-  recent.push(now);
-  credentialUpdatesByUser.set(userId, recent);
-  return { allowed: true as const };
-}
-
 export async function PUT(request: Request) {
   try {
     const userId = await requireUserId(request);
-    const limit = checkUserRateLimit(userId);
+    const limit = await checkCredentialUpdateRateLimit(userId);
     if (!limit.allowed) {
       return NextResponse.json(
         { ok: false, errorCode: 'RATE_LIMITED', error: 'Too many credential update attempts. Please try again shortly.' },

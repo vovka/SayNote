@@ -31,6 +31,13 @@ export type CategoryTreeNode = {
   children: CategoryTreeNode[];
 };
 
+type CredentialUpdateAttemptRow = {
+  created_at: string;
+};
+
+const CREDENTIAL_UPDATE_RATE_LIMIT_WINDOW_MS = 60_000;
+const CREDENTIAL_UPDATE_RATE_LIMIT_MAX_UPDATES = 5;
+
 function getSupabase() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -213,6 +220,36 @@ export async function getAIConfig(userId: string) {
     fallbackOnTerminalPrimaryFailure: config?.fallback_on_terminal_primary_failure ?? false,
     providersWithKey: (credsResult.data ?? []).map((row) => row.provider)
   };
+}
+
+export async function checkCredentialUpdateRateLimit(userId: string) {
+  const supabase = getSupabase();
+  const now = Date.now();
+  const windowStartedAt = new Date(now - CREDENTIAL_UPDATE_RATE_LIMIT_WINDOW_MS).toISOString();
+
+  const { data, error } = await supabase
+    .from('ai_credential_update_attempts')
+    .select('created_at')
+    .eq('user_id', userId)
+    .gte('created_at', windowStartedAt)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+
+  const recentAttempts = (data ?? []) as CredentialUpdateAttemptRow[];
+  if (recentAttempts.length >= CREDENTIAL_UPDATE_RATE_LIMIT_MAX_UPDATES) {
+    const oldestAttempt = recentAttempts[0]?.created_at;
+    const oldestAttemptMs = oldestAttempt ? Date.parse(oldestAttempt) : now;
+    const retryAfterMs = Math.max(0, CREDENTIAL_UPDATE_RATE_LIMIT_WINDOW_MS - (now - oldestAttemptMs));
+    return { allowed: false as const, retryAfterSeconds: Math.max(1, Math.ceil(retryAfterMs / 1000)) };
+  }
+
+  const { error: insertError } = await supabase
+    .from('ai_credential_update_attempts')
+    .insert({ user_id: userId });
+
+  if (insertError) throw insertError;
+  return { allowed: true as const };
 }
 
 export async function upsertCredential(userId: string, provider: string, apiKey: string) {
