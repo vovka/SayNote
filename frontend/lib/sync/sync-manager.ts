@@ -1,5 +1,5 @@
 import { db } from '@/lib/db/indexeddb';
-import { getJob, uploadAudio } from '@/lib/api/client';
+import { getCurrentUserId, getJob, uploadAudio } from '@/lib/api/client';
 import {
   pickProcessingQueue,
   pickStaleProcessingRecoveryQueue,
@@ -96,13 +96,17 @@ export async function triggerSyncNow() {
 
 async function runSync() {
   if (!navigator.onLine) return;
-  await recoverStaleSyncState();
-  await cleanupSyncedRecords();
+  const userId = await getCurrentUserId();
+  if (!userId) return;
+
+  await recoverStaleSyncState(userId);
+  await cleanupSyncedRecords(userId);
 
   const now = new Date().toISOString();
   const queuedUploads = await db.recordings
-    .where('status')
-    .anyOf('queued_upload', 'failed_retryable')
+    .where('userId')
+    .equals(userId)
+    .and((item) => item.status === 'queued_upload' || item.status === 'failed_retryable')
     .toArray();
 
   for (const item of pickUploadQueue(queuedUploads, now)) {
@@ -110,16 +114,21 @@ async function runSync() {
   }
 
   const processingQueue = await db.recordings
-    .where('status')
-    .anyOf('uploaded_waiting_processing', 'failed_retryable')
+    .where('userId')
+    .equals(userId)
+    .and((item) => item.status === 'uploaded_waiting_processing' || item.status === 'failed_retryable')
     .toArray();
   for (const item of pickProcessingQueue(processingQueue, now)) {
     await pollJobStatus(item.id);
   }
 }
 
-export async function recoverStaleSyncState(nowIso = new Date().toISOString()) {
-  const uploadRecoveryCandidates = await db.recordings.where('status').equals('uploading').toArray();
+export async function recoverStaleSyncState(userId: string, nowIso = new Date().toISOString()) {
+  const uploadRecoveryCandidates = await db.recordings
+    .where('userId')
+    .equals(userId)
+    .and((item) => item.status === 'uploading')
+    .toArray();
   for (const item of pickStaleUploadRecoveryQueue(uploadRecoveryCandidates, nowIso, UPLOADING_STALE_MS)) {
     await db.recordings.update(item.id, {
       status: 'queued_upload',
@@ -131,8 +140,9 @@ export async function recoverStaleSyncState(nowIso = new Date().toISOString()) {
   }
 
   const processingRecoveryCandidates = await db.recordings
-    .where('status')
-    .anyOf('uploaded_waiting_processing', 'failed_retryable')
+    .where('userId')
+    .equals(userId)
+    .and((item) => item.status === 'uploaded_waiting_processing' || item.status === 'failed_retryable')
     .toArray();
 
   for (const item of pickStaleProcessingRecoveryQueue(processingRecoveryCandidates, nowIso, PROCESSING_STALE_MS)) {
@@ -273,23 +283,28 @@ function emitSyncJobCompleted(detail: { recordingId: string; serverJobId: string
   window.dispatchEvent(new CustomEvent(SYNC_JOB_COMPLETED_EVENT, { detail }));
 }
 
-async function cleanupSyncedRecords() {
+async function cleanupSyncedRecords(userId: string) {
   const now = Date.now();
-  const all = await db.recordings.toArray();
-  for (const item of all) {
-    if (item.audioBlob && (item.status === 'uploaded_waiting_processing' || item.status === 'processed')) {
-      await db.recordings.update(item.id, { audioBlob: undefined });
-    }
+  const processedBefore = new Date(now - CLEANUP_POLICY.processedTtlMs).toISOString();
+  const terminalFailureBefore = new Date(now - CLEANUP_POLICY.terminalFailureTtlMs).toISOString();
 
-    if (item.status === 'processed' && item.processedAt && now - Date.parse(item.processedAt) > CLEANUP_POLICY.processedTtlMs) {
-      await db.recordings.delete(item.id);
-      continue;
-    }
+  await db.recordings
+    .where('userId')
+    .equals(userId)
+    .and((item) => Boolean(item.audioBlob) && (item.status === 'uploaded_waiting_processing' || item.status === 'processed'))
+    .modify({ audioBlob: undefined });
 
-    if (item.status === 'failed_terminal' && now - Date.parse(item.statusUpdatedAt) > CLEANUP_POLICY.terminalFailureTtlMs) {
-      await db.recordings.delete(item.id);
-    }
-  }
+  await db.recordings
+    .where('userId')
+    .equals(userId)
+    .and((item) => Boolean(item.processedAt) && item.status === 'processed' && item.processedAt! < processedBefore)
+    .delete();
+
+  await db.recordings
+    .where('userId')
+    .equals(userId)
+    .and((item) => item.status === 'failed_terminal' && item.statusUpdatedAt < terminalFailureBefore)
+    .delete();
 }
 
 function computeBackoffMs(retryCount: number, baseMs: number, capMs: number) {
