@@ -20,9 +20,14 @@ type AIConfig = { primaryProvider: string; transcriptionModel: string; categoriz
 const jobs = new Map<string, Job>();
 const jobsByKey = new Map<string, string>();
 const categories = new Map<string, Category>();
+const categoriesByPath = new Map<string, string>();
 const notes = new Map<string, Note>();
 const aiConfig = new Map<string, AIConfig>();
 const aiCredentialPresence = new Map<string, Set<string>>();
+
+function buildCategoryLookupKey(userId: string, parentId: string | undefined, name: string) {
+  return `${userId}:${parentId ?? 'root'}:${name}`;
+}
 
 export const store = {
   upsertJob(input: Omit<Job, 'createdAt' | 'updatedAt'>) {
@@ -92,13 +97,15 @@ export const store = {
 function ensureCategoryPath(userId: string, path: string[]) {
   let parentId: string | undefined;
   for (const segment of path) {
-    const existing = Array.from(categories.values()).find((c) => c.userId === userId && c.parentId === parentId && c.name === segment);
-    if (existing) {
-      parentId = existing.id;
+    const existingId = categoriesByPath.get(buildCategoryLookupKey(userId, parentId, segment));
+    if (existingId) {
+      parentId = existingId;
       continue;
     }
+
     const id = crypto.randomUUID();
     categories.set(id, { id, userId, name: segment, parentId });
+    categoriesByPath.set(buildCategoryLookupKey(userId, parentId, segment), id);
     parentId = id;
   }
   return parentId!;
