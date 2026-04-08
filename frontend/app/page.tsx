@@ -24,9 +24,13 @@ function RecordPageContent() {
 
   async function onTapRecord() {
     if (!recording) {
-      await startRecording();
-      setRecording(true);
-      setStatus('Recording');
+      try {
+        await startRecording();
+        setRecording(true);
+        setStatus('Recording');
+      } catch {
+        setStatus('Microphone access denied or unavailable');
+      }
       return;
     }
 
