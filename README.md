@@ -12,8 +12,8 @@ SayNote is a mobile-first Progressive Web App for recording voice notes, syncing
    - Supabase Postgres is the system of record for jobs, notes, categories, and user settings/credentials metadata.
 3. **Cloudflare R2 for temporary audio objects**
    - Uploaded audio is stored in R2 during async processing and deleted after successful completion.
-4. **Separate worker process (`backend/worker`)**
-   - A standalone worker claims pending jobs, downloads audio from R2, runs provider adapters, writes results to Supabase, and updates job status.
+4. **Vercel Workflow-driven processing**
+   - Each accepted upload starts a workflow run that claims the specific job, downloads audio from R2, runs provider adapters, writes results to Supabase, and updates job status.
 
 ---
 
@@ -27,7 +27,7 @@ SayNote is a mobile-first Progressive Web App for recording voice notes, syncing
 - Provider adapter abstraction with Groq/OpenRouter implementations.
 - Encryption utility for user BYOK credential storage.
 - Supabase SQL schema and RLS-oriented multi-tenant model.
-- Worker pipeline for async transcription + categorization + persistence.
+- Workflow-backed async transcription + categorization + persistence pipeline.
 - Cloudflare R2 temporary object lifecycle integration.
 
 ---
@@ -64,61 +64,46 @@ Required variables:
 - `R2_SECRET_ACCESS_KEY`
 - `R2_BUCKET`
 - `R2_ENDPOINT` (if required by your R2 setup)
+- `PROCESSING_RETRY_DELAY_MS` (optional, defaults to `2000`)
 
 Initialize the database before starting the app:
 
 ```bash
-npm run db:bootstrap
+docker compose run --rm saynote npm run db:bootstrap
 ```
 
 For later schema changes on an existing database:
 
 ```bash
-npm run db:migrate
-npm run db:migrate:status
+docker compose run --rm saynote npm run db:migrate
+docker compose run --rm saynote npm run db:migrate:status
 ```
 
 ---
 
 ## Local Run Commands (Exact)
 
-### Option A (recommended): containerized frontend + worker
+### Docker
 
 ```bash
 docker compose up --build
 ```
 
-- Frontend/API: `http://localhost:3000`
-- Worker: async processing loop in separate container
-
-### Option B: run processes directly
-
-In terminal 1 (frontend):
-
-```bash
-npm install
-npm run -w frontend dev
-```
-
-In terminal 2 (worker):
-
-```bash
-npx tsc -p backend/tsconfig.json
-npm run -w backend worker
-```
+- Frontend/API + local workflow runtime: `http://localhost:3000`
+- Upload processing runs through the Workflow local world inside the Next.js app container
 
 Optional verification:
 
 ```bash
-npm run typecheck
-npm test
+docker compose run --rm saynote npm run typecheck
+docker compose run --rm saynote npm test
 ```
 
 ---
 
 ## Known Remaining Gaps (Only)
 
-- Durable queue/broker integration is still optional; current deployment can use polling worker.
+- Durable queue/broker integration is still optional; current deployment uses Vercel Workflow.
 - End-to-end automated integration tests (web + worker + Supabase + R2) are not yet included.
 - Expanded production observability/alerts and runbooks can be further hardened.
 

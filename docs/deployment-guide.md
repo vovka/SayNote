@@ -4,7 +4,7 @@ This guide covers the production deployment sequence for the real architecture:
 - Next.js web app + API routes
 - Supabase Auth + Postgres persistence
 - Cloudflare R2 temporary audio storage
-- Separate async worker service
+- Vercel Workflow-based background processing
 
 ## 1) Provision Supabase + OAuth
 
@@ -32,7 +32,7 @@ This guide covers the production deployment sequence for the real architecture:
 
 ## 3) Configure Environment Variables
 
-Configure all web + worker environments with the same contract:
+Configure the Vercel app environment with this contract:
 
 - `NEXT_PUBLIC_BASE_URL`
 - `NEXT_PUBLIC_SUPABASE_URL`
@@ -45,6 +45,7 @@ Configure all web + worker environments with the same contract:
 - `R2_SECRET_ACCESS_KEY`
 - `R2_BUCKET`
 - `R2_ENDPOINT` (optional per provider/account)
+- `PROCESSING_RETRY_DELAY_MS` (optional; defaults to 2000)
 
 ## 4) Run Database Migrations
 
@@ -73,18 +74,17 @@ npm run -w frontend build
    - `/api/settings/ai-config`
    - `/api/settings/ai-credentials`
 
-## 6) Deploy Worker (Separate Process)
+## 6) Deploy Processing Workflow
 
-Deploy `backend/worker` as an always-on process or scheduled runner independent of web requests.
+Deploy `frontend` to Vercel with Workflow enabled through `frontend/next.config.ts`.
 
-Recommended runtime flow:
-1. Claim pending jobs atomically.
-2. Resolve user config and encrypted credentials.
-3. Decrypt in-memory immediately before provider call.
-4. Download audio from R2.
-5. Transcribe + categorize.
-6. Persist categories/notes/job transitions in Supabase.
-7. Delete temporary R2 object.
+Runtime flow:
+1. Upload route stores audio in R2 and inserts the `processing_jobs` row.
+2. Upload route triggers a workflow run for that job ID.
+3. The workflow claims that specific job atomically.
+4. Processing uses the existing `backend/worker/jobs/process-job.ts` domain logic.
+5. Retryable failures sleep and retry inside the workflow until terminal or completed.
+6. Job status polling can re-trigger the workflow for orphaned `uploaded` jobs.
 
 ## 7) End-to-End Validation
 

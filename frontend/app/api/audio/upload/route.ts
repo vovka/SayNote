@@ -3,6 +3,7 @@ import { requireUserId } from '@/lib/auth/session';
 import { createUploadJob } from '@/lib/api/supabase-server';
 import { scrubSensitiveFields } from '@/lib/api/safe-logging';
 import { buildUploadLogContext, logUploadFailure, type UploadLogContext } from '@/lib/api/upload-log';
+import { startProcessingJobWorkflow } from '@/lib/api/start-processing-job-workflow';
 import {
   buildIdempotentTemporaryAudioStorageKey,
   deleteTemporaryAudio,
@@ -110,6 +111,12 @@ export async function POST(request: Request) {
         clientCreatedAt,
         audioStorageKey: storageKey
       });
+
+      try {
+        await startProcessingJobWorkflow(job.id, job.status);
+      } catch (workflowError) {
+        logUploadFailure('[audio_upload_workflow_start_failed]', 'UPLOAD_WORKFLOW_START_FAILED', workflowError, logContext);
+      }
 
       const response = toAcceptedResponse(job);
       if (job.wasDuplicate) {

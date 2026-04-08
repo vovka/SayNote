@@ -6,7 +6,6 @@
     "db:migrate": "sh scripts/db.sh migrate",
     "db:migrate:status": "sh scripts/db.sh status",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
-    "worker": "node dist/backend/worker/index.js",
     "test": "node --import ../scripts/register-ts-extensionless-hooks.mjs --test --experimental-strip-types $(find worker -name '*.test.ts' -print)"
   },
   "dependencies": {

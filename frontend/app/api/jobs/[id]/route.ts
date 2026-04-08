@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireUserId } from '@/lib/auth/session';
 import { getJobForUser } from '@/lib/api/supabase-server';
 import { scrubSensitiveFields } from '@/lib/api/safe-logging';
+import { startProcessingJobWorkflow } from '@/lib/api/start-processing-job-workflow';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -11,6 +12,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     if (!job) {
       return NextResponse.json({ error: 'Not found', errorCode: 'JOB_NOT_FOUND' }, { status: 404 });
+    }
+
+    try {
+      await startProcessingJobWorkflow(job.id, job.status);
+    } catch (error) {
+      console.warn('[job_lookup_workflow_start_failed]', JSON.stringify({ errorCode: 'JOB_WORKFLOW_START_FAILED', safeDetails: scrubSensitiveFields(error) }));
     }
 
     return NextResponse.json({

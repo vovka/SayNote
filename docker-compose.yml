@@ -14,26 +14,6 @@ services:
     volumes:
       - .:/app
       - saynote_node_modules:/app/node_modules
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: deps
-    env_file:
-      - .env
-    depends_on:
-      - saynote
-    working_dir: /app
-    command: >
-      sh -c "npx tsc -p backend/tsconfig.json && node backend/dist/backend/worker/index.js"
-    environment:
-      WORKER_BATCH_SIZE: ${WORKER_BATCH_SIZE:-5}
-      WORKER_POLL_INTERVAL_MS: ${WORKER_POLL_INTERVAL_MS:-2000}
-      WORKER_MAX_JOBS: ${WORKER_MAX_JOBS:-0}
-      WORKER_CONTINUOUS: ${WORKER_CONTINUOUS:-true}
-    volumes:
-      - .:/app
-      - saynote_node_modules:/app/node_modules
 
 volumes:
   saynote_node_modules:
