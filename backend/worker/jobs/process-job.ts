@@ -98,7 +98,6 @@ async function applyRecategorizationsBestEffort(input: {
   result: CategorizeWithReviewResult;
   deps: ProcessJobDependencies;
 }) {
-  const categoryById = new Map(input.categories.map((category) => [category.id, category]));
   const lockedSet = buildLockedSubtreeSet(
     input.categories.map((category) => ({ id: category.id, parent_id: category.parent_id, is_locked: category.is_locked }))
   );
@@ -112,23 +111,17 @@ async function applyRecategorizationsBestEffort(input: {
 
       validateAssignmentShape(recategorization);
 
-      let targetCategoryId = recategorization.selectedCategoryId;
-      if (!targetCategoryId) {
-        targetCategoryId = await input.deps.resolveCategorySelection(input.client, {
-          userId: input.job.user_id,
-          newCategoryPath: recategorization.newCategoryPath
-        });
-      }
+      const targetCategoryId = await input.deps.resolveCategorySelection(input.client, {
+        userId: input.job.user_id,
+        selectedCategoryId: recategorization.selectedCategoryId,
+        newCategoryPath: recategorization.newCategoryPath
+      });
 
-      if (!targetCategoryId || targetCategoryId === reviewNote.current_category_id) {
+      if (targetCategoryId === reviewNote.current_category_id) {
         continue;
       }
 
       if (isCategoryLocked(targetCategoryId, lockedSet)) {
-        continue;
-      }
-
-      if (!categoryById.has(targetCategoryId)) {
         continue;
       }
 

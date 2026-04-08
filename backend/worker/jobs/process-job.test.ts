@@ -21,6 +21,11 @@ test('process-job uses unified categorizeWithReview call and isolates post-inser
 
   assert.match(source, /adapter\.categorizeWithReview\(/);
   assert.match(source, /applyRecategorizationsBestEffort/);
+  assert.match(
+    source,
+    /resolveCategorySelection\(input\.client, \{\s*userId: input\.job\.user_id,\s*selectedCategoryId: recategorization\.selectedCategoryId,\s*newCategoryPath: recategorization\.newCategoryPath/s
+  );
   assert.match(source, /POST_INSERT_REVIEW_FAILED/);
   assert.match(source, /await client\.query\('commit'\);[\s\S]*await client\.query\('begin'\);/);
+  assert.doesNotMatch(source, /categoryById\.has\(targetCategoryId\)/);
 });
