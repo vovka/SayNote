@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireUserId } from '@/lib/auth/session';
 import { checkCredentialUpdateRateLimit, upsertCredential } from '@/lib/api/supabase-server';
-import { mapErrorCode, scrubSensitiveFields } from '@/lib/api/safe-logging';
+import { scrubSensitiveFields } from '@/lib/api/safe-logging';
 
 const ALLOWED_PROVIDERS = new Set(['groq', 'openrouter']);
 
@@ -14,6 +14,18 @@ const schema = z.object({
     .refine((value) => ALLOWED_PROVIDERS.has(value), { message: 'Unsupported provider' }),
   apiKey: z.string().min(8)
 });
+
+function mapCredentialFailure(error: unknown) {
+  if (error instanceof z.ZodError) {
+    return { errorCode: 'INVALID_CREDENTIAL_PAYLOAD', message: 'Invalid credential payload', status: 400 };
+  }
+
+  if (error instanceof Error && error.message === 'Unsupported provider') {
+    return { errorCode: 'INVALID_CREDENTIAL_PAYLOAD', message: 'Invalid credential payload', status: 400 };
+  }
+
+  return { errorCode: 'AI_CREDENTIAL_UPDATE_FAILED', message: 'Internal server error', status: 500 };
+}
 
 export async function PUT(request: Request) {
   try {
@@ -35,14 +47,14 @@ export async function PUT(request: Request) {
       return NextResponse.json({ ok: false, errorCode: 'UNAUTHORIZED', error: 'Unauthorized' }, { status: 401 });
     }
 
-    const errorCode = mapErrorCode(error);
+    const failure = mapCredentialFailure(error);
     console.error(
-      '[ai_credential_update_failed]',
+      failure.status === 400 ? '[ai_credential_payload_invalid]' : '[ai_credential_update_failed]',
       JSON.stringify({
-        errorCode,
+        errorCode: failure.errorCode,
         safeDetails: scrubSensitiveFields(error)
       })
     );
-    return NextResponse.json({ ok: false, errorCode, error: 'Invalid credential payload' }, { status: 400 });
+    return NextResponse.json({ ok: false, errorCode: failure.errorCode, error: failure.message }, { status: failure.status });
   }
 }

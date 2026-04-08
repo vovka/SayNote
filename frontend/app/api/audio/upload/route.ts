@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireUserId } from '@/lib/auth/session';
 import { createUploadJob } from '@/lib/api/supabase-server';
 import { scrubSensitiveFields } from '@/lib/api/safe-logging';
+import { buildUploadLogContext, logUploadFailure, type UploadLogContext } from '@/lib/api/upload-log';
 import {
   buildIdempotentTemporaryAudioStorageKey,
   deleteTemporaryAudio,
@@ -52,6 +53,8 @@ function invalidPayload(message: string, status = 400) {
 }
 
 export async function POST(request: Request) {
+  let logContext: UploadLogContext | undefined;
+
   try {
     const userId = await requireUserId(request);
     const formData = await request.formData();
@@ -82,8 +85,20 @@ export async function POST(request: Request) {
 
     const mimeType = invariantResult.normalizedMimeType;
     const audioBytes = new Uint8Array(await uploadedAudio.arrayBuffer());
+    logContext = buildUploadLogContext({
+      clientRecordingId,
+      idempotencyKey,
+      mimeType,
+      sizeBytes: uploadedAudio.size,
+      durationMs
+    });
     const storageKey = buildIdempotentTemporaryAudioStorageKey(userId, idempotencyKey, mimeType);
-    await putTemporaryAudio(storageKey, audioBytes, mimeType);
+    try {
+      await putTemporaryAudio(storageKey, audioBytes, mimeType);
+    } catch (error) {
+      logUploadFailure('[audio_upload_r2_put_failed]', 'AUDIO_STORAGE_WRITE_FAILED', error, logContext);
+      throw error;
+    }
 
     try {
       const job = await createUploadJob({
@@ -103,6 +118,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ ...response, errorCode: 'UPLOAD_ACCEPTED' });
     } catch (dbError) {
+      logUploadFailure('[audio_upload_db_create_failed]', 'UPLOAD_JOB_CREATE_FAILED', dbError, logContext);
       try {
         await deleteTemporaryAudio(storageKey);
       } catch (cleanupError) {
@@ -127,7 +143,10 @@ export async function POST(request: Request) {
       );
       return NextResponse.json({ error: 'Invalid upload payload', errorCode: 'INVALID_UPLOAD_PAYLOAD' }, { status: 400 });
     }
-    console.error('[audio_upload_failed]', JSON.stringify({ errorCode: 'UPLOAD_FAILED', safeDetails: scrubSensitiveFields(error) }));
+    console.error(
+      '[audio_upload_failed]',
+      JSON.stringify({ errorCode: 'UPLOAD_FAILED', context: logContext, safeDetails: scrubSensitiveFields(error) })
+    );
     return NextResponse.json({ error: 'Internal server error', errorCode: 'UPLOAD_FAILED' }, { status: 500 });
   }
 }
