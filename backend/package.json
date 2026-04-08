@@ -7,7 +7,7 @@
     "db:migrate:status": "sh scripts/db.sh status",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
     "worker": "node dist/backend/worker/index.js",
-    "test": "node --test --experimental-strip-types $(find worker -name '*.test.ts' -print)"
+    "test": "node --import ../scripts/register-ts-extensionless-hooks.mjs --test --experimental-strip-types $(find worker -name '*.test.ts' -print)"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1025.0",
