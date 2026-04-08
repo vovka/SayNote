@@ -106,6 +106,10 @@ export async function encryptSecret(plaintext: string) {
 
 function decryptLegacySecret(ciphertextBase64: string) {
   const input = Buffer.from(ciphertextBase64, 'base64');
+  if (input.length < 28) {
+    throw new Error('Invalid legacy ciphertext: insufficient length');
+  }
+
   const iv = input.subarray(0, 12);
   const tag = input.subarray(12, 28);
   const ciphertext = input.subarray(28);

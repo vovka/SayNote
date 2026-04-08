@@ -32,6 +32,13 @@ test('decryptSecret supports legacy ciphertext format', async () => {
   assert.equal(plaintext, 'legacy-value');
 });
 
+test('decryptSecret rejects truncated legacy ciphertext', async () => {
+  process.env.NODE_ENV = 'test';
+  process.env.ENCRYPTION_MASTER_KEY = 'TestMasterKey-LongEnough-1234567890!';
+
+  await assert.rejects(() => decryptSecret(Buffer.alloc(8).toString('base64')), /insufficient length/);
+});
+
 test('validateMasterKeyConfig rejects missing keys outside local development', async () => {
   assert.throws(
     () => validateMasterKeyConfig({ NODE_ENV: 'production' } as NodeJS.ProcessEnv),
