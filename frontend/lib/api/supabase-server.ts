@@ -23,11 +23,16 @@ export type CategoryRow = {
   id: string;
   parent_id: string | null;
   name: string;
+  path_cache: string | null;
+  is_locked: boolean;
 };
 
 export type CategoryTreeNode = {
   id: string;
   name: string;
+  path: string;
+  depth: number;
+  isLocked: boolean;
   children: CategoryTreeNode[];
 };
 
@@ -68,13 +73,17 @@ function sortCategories(categories: CategoryRow[]): CategoryRow[] {
   return [...categories].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
 
+function getPath(category: CategoryRow) {
+  return category.path_cache?.trim() || category.name;
+}
+
 function buildCategoriesTree(categories: CategoryRow[]): CategoryTreeNode[] {
-  const byParent = new Map<string | undefined, CategoryTreeNode[]>();
+  const byParent = new Map<string | undefined, CategoryRow[]>();
 
   for (const category of categories) {
     const key = category.parent_id ?? undefined;
     const siblingNodes = byParent.get(key) ?? [];
-    siblingNodes.push({ id: category.id, name: category.name, children: [] });
+    siblingNodes.push(category);
     byParent.set(key, siblingNodes);
   }
 
@@ -82,10 +91,17 @@ function buildCategoriesTree(categories: CategoryRow[]): CategoryTreeNode[] {
     const siblings = byParent.get(parentId) ?? [];
     const sortedSiblings = [...siblings].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 
-    return sortedSiblings.map((node) => ({
-      ...node,
-      children: build(node.id)
-    }));
+    return sortedSiblings.map((category) => {
+      const path = getPath(category);
+      return {
+        id: category.id,
+        name: category.name,
+        path,
+        depth: path.split('>').length,
+        isLocked: category.is_locked,
+        children: build(category.id)
+      };
+    });
   };
 
   return build(undefined);
@@ -93,16 +109,52 @@ function buildCategoriesTree(categories: CategoryRow[]): CategoryTreeNode[] {
 
 export async function getCategoriesForUser(userId: string) {
   const supabase = getSupabase();
-  const { data, error } = await supabase.from('categories').select('id,parent_id,name').eq('user_id', userId);
+  const { data, error } = await supabase.from('categories').select('id,parent_id,name,path_cache,is_locked').eq('user_id', userId);
 
   if (error) throw error;
 
-  return sortCategories((data ?? []) as CategoryRow[]);
+  return sortCategories((data ?? []) as CategoryRow[]).map((category) => ({
+    id: category.id,
+    parent_id: category.parent_id,
+    name: category.name,
+    path: getPath(category),
+    depth: getPath(category).split('>').length,
+    isLocked: category.is_locked
+  }));
 }
 
 export async function getCategoriesTreeForUser(userId: string) {
-  const categories = await getCategoriesForUser(userId);
-  return buildCategoriesTree(categories);
+  const supabase = getSupabase();
+  const { data, error } = await supabase.from('categories').select('id,parent_id,name,path_cache,is_locked').eq('user_id', userId);
+
+  if (error) throw error;
+
+  return buildCategoriesTree(sortCategories((data ?? []) as CategoryRow[]));
+}
+
+export async function updateCategoryLock(userId: string, categoryId: string, isLocked: boolean) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('categories')
+    .update({ is_locked: isLocked, updated_at: new Date().toISOString() })
+    .eq('id', categoryId)
+    .eq('user_id', userId)
+    .select('id,parent_id,name,path_cache,is_locked')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const row = data as CategoryRow;
+  const path = getPath(row);
+  return {
+    id: row.id,
+    parent_id: row.parent_id,
+    name: row.name,
+    path,
+    depth: path.split('>').length,
+    isLocked: row.is_locked
+  };
 }
 
 export async function getUploadJobByIdempotencyKey(userId: string, idempotencyKey: string) {
@@ -278,7 +330,7 @@ export async function upsertCredential(userId: string, provider: string, apiKey:
 export async function getNotesTreeForUser(userId: string) {
   const supabase = getSupabase();
   const [categories, notesResult] = await Promise.all([
-    getCategoriesForUser(userId),
+    getCategoriesTreeForUser(userId),
     supabase
       .from('notes')
       .select('id,category_id,text,created_at')
@@ -302,17 +354,18 @@ export async function getNotesTreeForUser(userId: string) {
     notesByCategory.set(note.category_id as string, arr);
   }
 
-  const categoriesTree = buildCategoriesTree(categories);
-
   const attachNotes = (nodes: CategoryTreeNode[]): unknown[] =>
     nodes.map((category) => ({
       id: category.id,
       name: category.name,
+      path: category.path,
+      depth: category.depth,
+      isLocked: category.isLocked,
       notes: (notesByCategory.get(category.id) ?? []).sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || a.id.localeCompare(b.id)
       ),
       children: attachNotes(category.children)
     }));
 
-  return attachNotes(categoriesTree);
+  return attachNotes(categories);
 }

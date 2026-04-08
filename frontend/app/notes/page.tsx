@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AuthGate } from '@/components/auth-gate';
 import { AuthControls } from '@/components/auth-controls';
-import { getNotes } from '@/lib/api/client';
+import { getNotes, updateCategoryLock } from '@/lib/api/client';
 import { db, type RecordingEntity } from '@/lib/db/indexeddb';
 import { SYNC_JOB_COMPLETED_EVENT } from '@/lib/sync/sync-manager';
 import { shouldRefreshNotesForProcessedTransition } from '@/lib/notes/refresh-policy';
@@ -13,15 +13,27 @@ import { sortCategoryTreeNewestFirst } from '@/lib/notes/tree-ordering';
 interface CategoryNode {
   id: string;
   name: string;
+  path: string;
+  depth: number;
+  isLocked: boolean;
   notes: { id: string; text: string; createdAt: string; status?: string }[];
   children: CategoryNode[];
 }
 
-function CategoryTree({ node, path = [] }: { node: CategoryNode; path?: string[] }) {
+function CategoryTree({ node, path = [], onToggleLock }: { node: CategoryNode; path?: string[]; onToggleLock: (node: CategoryNode) => void }) {
   const nextPath = [...path, node.name];
   return (
     <section style={{ marginLeft: path.length * 16 }}>
-      <h3>{node.name}</h3>
+      <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {node.name}
+        <button
+          type="button"
+          aria-label={node.isLocked ? `Unlock category ${node.name}` : `Lock category ${node.name}`}
+          onClick={() => onToggleLock(node)}
+        >
+          {node.isLocked ? '🔒' : '🔓'}
+        </button>
+      </h3>
       <ul>
         {node.notes.map((note) => (
           <li key={note.id}>
@@ -30,9 +42,22 @@ function CategoryTree({ node, path = [] }: { node: CategoryNode; path?: string[]
           </li>
         ))}
       </ul>
-      {node.children.map((child) => <CategoryTree key={child.id} node={child} path={nextPath} />)}
+      {node.children.map((child) => <CategoryTree key={child.id} node={child} path={nextPath} onToggleLock={onToggleLock} />)}
     </section>
   );
+}
+
+function updateNodeLock(nodes: CategoryNode[], categoryId: string, isLocked: boolean): CategoryNode[] {
+  return nodes.map((node) => {
+    if (node.id === categoryId) {
+      return { ...node, isLocked };
+    }
+
+    return {
+      ...node,
+      children: updateNodeLock(node.children, categoryId, isLocked)
+    };
+  });
 }
 
 function NotesPageContent() {
@@ -83,6 +108,17 @@ function NotesPageContent() {
     };
   }, []);
 
+  const handleToggleLock = async (node: CategoryNode) => {
+    const nextLocked = !node.isLocked;
+    setTrees((previous) => updateNodeLock(previous, node.id, nextLocked));
+
+    try {
+      await updateCategoryLock(node.id, nextLocked);
+    } catch {
+      setTrees((previous) => updateNodeLock(previous, node.id, node.isLocked));
+    }
+  };
+
   return (
     <main>
       <AuthControls />
@@ -107,12 +143,10 @@ function NotesPageContent() {
           </ul>
         )}
       </section>
-      {trees.map((node) => <CategoryTree key={node.id} node={node} />)}
+      {trees.map((node) => <CategoryTree key={node.id} node={node} onToggleLock={handleToggleLock} />)}
     </main>
   );
 }
-
-
 
 export default function NotesPage() {
   return (

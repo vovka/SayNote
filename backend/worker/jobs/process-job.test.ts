@@ -15,3 +15,12 @@ test('process-job note insert uses original recording timestamp and distinct pro
     /values \(\$1, \$2, \$3, \$4, \$5::timestamptz, \$5::timestamptz, now\(\), \$6::jsonb\)/
   );
 });
+
+test('process-job uses unified categorizeWithReview call and isolates post-insert recategorization failures', async () => {
+  const source = await readFile(new URL('./process-job.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /adapter\.categorizeWithReview\(/);
+  assert.match(source, /applyRecategorizationsBestEffort/);
+  assert.match(source, /POST_INSERT_REVIEW_FAILED/);
+  assert.match(source, /await client\.query\('commit'\);[\s\S]*await client\.query\('begin'\);/);
+});

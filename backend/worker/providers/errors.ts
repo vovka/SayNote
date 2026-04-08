@@ -2,7 +2,7 @@ export type ProviderFailureKind = 'retryable' | 'terminal';
 
 export interface ProviderErrorOptions {
   provider: string;
-  operation: 'transcribe' | 'categorize';
+  operation: 'transcribe' | 'categorizeWithReview';
   kind: ProviderFailureKind;
   code: string;
   safeMessage: string;
@@ -12,7 +12,7 @@ export interface ProviderErrorOptions {
 
 export class ProviderError extends Error {
   readonly provider: string;
-  readonly operation: 'transcribe' | 'categorize';
+  readonly operation: 'transcribe' | 'categorizeWithReview';
   readonly kind: ProviderFailureKind;
   readonly code: string;
   readonly safeMessage: string;
@@ -63,7 +63,7 @@ export function safeErrorMessage(error: unknown) {
 
 export function mapHttpFailure(input: {
   provider: string;
-  operation: 'transcribe' | 'categorize';
+  operation: 'transcribe' | 'categorizeWithReview';
   status: number;
   body: unknown;
 }) {
@@ -89,7 +89,7 @@ export function mapHttpFailure(input: {
 
 export function mapNetworkFailure(input: {
   provider: string;
-  operation: 'transcribe' | 'categorize';
+  operation: 'transcribe' | 'categorizeWithReview';
   error: unknown;
 }) {
   return new ProviderError({
@@ -104,7 +104,7 @@ export function mapNetworkFailure(input: {
 
 export function mapInvalidResponse(input: {
   provider: string;
-  operation: 'transcribe' | 'categorize';
+  operation: 'transcribe' | 'categorizeWithReview';
   reason: string;
 }) {
   return new ProviderError({
