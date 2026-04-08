@@ -48,9 +48,11 @@ Configure all web + worker environments with the same contract:
 
 ## 4) Run Database Migrations
 
-1. Apply schema from `db/schema.sql` to Supabase Postgres.
-2. Verify required tables, indexes, constraints, and RLS policies exist.
-3. Validate access boundaries with at least two test users.
+1. For a brand-new database, run `npm run db:bootstrap`.
+2. For later deploys, run `npm run db:migrate`.
+3. Optionally inspect pending/applied migration state with `npm run db:migrate:status`.
+4. Verify required tables, indexes, constraints, and RLS policies exist.
+5. Validate access boundaries with at least two test users.
 
 ## 5) Deploy Web (Next.js Frontend + API)
 

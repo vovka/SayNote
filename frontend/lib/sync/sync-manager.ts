@@ -1,5 +1,6 @@
 import { db } from '@/lib/db/indexeddb';
 import { getCurrentUserId, getJob, uploadAudio } from '@/lib/api/client';
+import { audioFileExtension } from '../../../shared/audio-mime.ts';
 import {
   pickProcessingQueue,
   pickStaleProcessingRecoveryQueue,
@@ -177,7 +178,7 @@ async function uploadOne(id: string) {
   await db.recordings.update(id, { status: 'uploading', failedStage: undefined, lastError: undefined, statusUpdatedAt: new Date().toISOString() });
 
   const form = new FormData();
-  form.append('audio', item.audioBlob, `${item.id}.webm`);
+  form.append('audio', item.audioBlob, `${item.id}.${audioFileExtension(item.mimeType)}`);
   form.append('clientRecordingId', item.id);
   form.append('idempotencyKey', item.uploadIdempotencyKey);
   form.append('mimeType', item.mimeType);

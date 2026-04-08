@@ -1,53 +1,87 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeCategoryPath, resolveCategoryPath } from './resolve-category-path.ts';
+import type { PoolClient } from 'pg';
+import {
+  normalizeCategoryPath,
+  normalizeCategoryPathText,
+  resolveCategoryPath,
+  resolveCategorySelection
+} from './resolve-category-path.ts';
 
-class CategoryClient {
-  readonly categories = new Map<string, { id: string; userId: string; parentId: string | null; name: string }>();
-  private nextId = 1;
-
-  async query(_sql: string, params: unknown[]) {
-    const [userId, parentId, segment] = params as [string, string | null, string];
-    const existing = [...this.categories.values()].find(
-      (category) => category.userId === userId && category.parentId === parentId && category.name === segment
-    );
-
-    if (existing) {
-      return { rows: [{ id: existing.id }] };
+function createMockClient(rowsByQuery: Array<Array<Record<string, string>>>) {
+  const queries: Array<{ sql: string; params: unknown[] }> = [];
+  const client = {
+    async query(sql: string, params: unknown[] = []) {
+      queries.push({ sql, params });
+      return { rowCount: rowsByQuery[0]?.length ?? 0, rows: rowsByQuery.shift() ?? [] };
     }
+  } as Pick<PoolClient, 'query'> as PoolClient;
 
-    const id = `cat-${this.nextId++}`;
-    this.categories.set(id, { id, userId, parentId, name: segment });
-    return { rows: [{ id }] };
-  }
+  return { client, queries };
 }
 
-test('normalizeCategoryPath trims segments and removes empty values', () => {
-  assert.deepEqual(normalizeCategoryPath([' Inbox ', '', '  Ideas  ', '  ']), ['Inbox', 'Ideas']);
+test('normalizeCategoryPath trims segments and collapses repeated whitespace', () => {
+  assert.deepEqual(normalizeCategoryPath([' Inbox ', '', 'Kitchen   Appliances', '  ']), ['Inbox', 'Kitchen Appliances']);
 });
 
-test('resolveCategoryPath is idempotent for the same nested path', async () => {
-  const client = new CategoryClient();
-
-  const first = await resolveCategoryPath(client as never, 'user-1', ['Inbox', 'Ideas']);
-  const second = await resolveCategoryPath(client as never, 'user-1', ['Inbox', 'Ideas']);
-
-  assert.equal(first, second);
-  assert.equal(client.categories.size, 2);
+test('normalizeCategoryPathText is case-insensitive and whitespace-insensitive', () => {
+  assert.equal(normalizeCategoryPathText([' Home ', ' Kitchen   Appliances ']), 'home > kitchen appliances');
+  assert.equal(normalizeCategoryPathText(['home', 'kitchen appliances']), 'home > kitchen appliances');
 });
 
-test('resolveCategoryPath preserves nested tree correctness', async () => {
-  const client = new CategoryClient();
+test('resolveCategoryPath returns an existing category for the normalized path', async () => {
+  const { client, queries } = createMockClient([[{ id: 'existing-category' }]]);
 
-  await resolveCategoryPath(client as never, 'user-1', ['Inbox', 'Ideas']);
-  await resolveCategoryPath(client as never, 'user-1', ['Inbox', 'Meetings']);
+  const categoryId = await resolveCategoryPath(client, 'user-1', [' Home ', ' Kitchen ']);
 
-  const categories = [...client.categories.values()];
-  const inbox = categories.find((category) => category.name === 'Inbox' && category.parentId === null);
-  assert.ok(inbox);
+  assert.equal(categoryId, 'existing-category');
+  assert.equal(queries.length, 1);
+  assert.deepEqual(queries[0]?.params, ['user-1', 'home > kitchen']);
+});
 
-  const ideas = categories.find((category) => category.name === 'Ideas');
-  const meetings = categories.find((category) => category.name === 'Meetings');
-  assert.equal(ideas?.parentId, inbox.id);
-  assert.equal(meetings?.parentId, inbox.id);
+test('resolveCategoryPath upserts each normalized segment and returns the leaf id', async () => {
+  const { client, queries } = createMockClient([
+    [],
+    [{ id: 'root-id', name: 'Home' }],
+    [{ id: 'leaf-id', name: 'Kitchen Appliances' }]
+  ]);
+
+  const categoryId = await resolveCategoryPath(client, 'user-1', [' Home ', 'Kitchen   Appliances']);
+
+  assert.equal(categoryId, 'leaf-id');
+  assert.equal(queries.length, 3);
+  assert.deepEqual(queries[1]?.params, ['user-1', null, 'Home', 'home', 'Home', 'home']);
+  assert.deepEqual(queries[2]?.params, [
+    'user-1',
+    'root-id',
+    'Kitchen Appliances',
+    'kitchen appliances',
+    'Home > Kitchen Appliances',
+    'home > kitchen appliances'
+  ]);
+});
+
+test('resolveCategorySelection validates selectedCategoryId for the user', async () => {
+  const { client, queries } = createMockClient([[{ id: 'category-1' }]]);
+
+  const categoryId = await resolveCategorySelection(client, {
+    userId: 'user-1',
+    selectedCategoryId: 'category-1'
+  });
+
+  assert.equal(categoryId, 'category-1');
+  assert.equal(queries.length, 1);
+  assert.deepEqual(queries[0]?.params, ['category-1', 'user-1']);
+});
+
+test('resolveCategorySelection rejects unknown selectedCategoryId values', async () => {
+  const { client } = createMockClient([[]]);
+
+  await assert.rejects(
+    resolveCategorySelection(client, {
+      userId: 'user-1',
+      selectedCategoryId: 'missing-category'
+    }),
+    /Selected category id was not found for user/
+  );
 });

@@ -3,9 +3,52 @@ export interface TranscriptionResult {
   raw?: unknown;
 }
 
-export interface CategorizationResult {
-  categoryPath: string[];
+export interface CategorizationCategorySummary {
+  id: string;
+  path: string;
+  depth: number;
+  isLocked: boolean;
+  noteCount: number;
+}
+
+export interface CategorizationNoteSummary {
+  id: string;
+  text: string;
+  currentCategoryId: string;
+  currentCategoryPath: string;
+  isInLockedSubtree: boolean;
+}
+
+export interface UnifiedCategorizationRequest {
+  newNote: {
+    text: string;
+    createdAt: string;
+  };
+  existingCategories: CategorizationCategorySummary[];
+  existingNotes: CategorizationNoteSummary[];
+  rules: {
+    reuseExistingCategoryWhenItFits: boolean;
+    allDepthsAreEquallyValid: boolean;
+    doNotPreferNestedCategories: boolean;
+    doNotMoveLockedSubtrees: boolean;
+    omitLowConfidenceRecategorizations: boolean;
+  };
+}
+
+export interface UnifiedAssignment {
+  selectedCategoryId?: string;
+  newCategoryPath?: string;
   confidence?: number;
+  reason?: string;
+}
+
+export interface UnifiedRecategorization extends UnifiedAssignment {
+  noteId: string;
+}
+
+export interface CategorizeWithReviewResult {
+  newNoteAssignment: UnifiedAssignment;
+  recategorizations: UnifiedRecategorization[];
   raw?: unknown;
 }
 
@@ -18,11 +61,9 @@ export interface AIProviderAdapter {
     metadata?: Record<string, unknown>;
   }): Promise<TranscriptionResult>;
 
-  categorize(input: {
-    text: string;
+  categorizeWithReview(input: {
     model: string;
     apiKey: string;
-    allowedCategories?: string[];
-    metadata?: Record<string, unknown>;
-  }): Promise<CategorizationResult>;
+    payload: UnifiedCategorizationRequest;
+  }): Promise<CategorizeWithReviewResult>;
 }

@@ -7,6 +7,8 @@ test('upload route requires/validates createdAt and persists normalized client t
   const storageSource = await readFile(new URL('./supabase-server.ts', import.meta.url), 'utf8');
 
   assert.match(routeSource, /const clientCreatedAt = parseClientCreatedAt\(formData\.get\('createdAt'\)\)/);
+  assert.match(routeSource, /const rawMimeType = uploadedAudio\.type \|\| String\(formData\.get\('mimeType'\) \?\? ''\)\.trim\(\) \|\| 'application\/octet-stream'/);
+  assert.match(routeSource, /const mimeType = invariantResult\.normalizedMimeType/);
   assert.match(routeSource, /if \(!clientCreatedAt\) \{\s*return invalidPayload\('Missing or invalid createdAt \(must be ISO-8601 with timezone\)'\);\s*\}/);
   assert.match(routeSource, /clientCreatedAt,\s*audioStorageKey: storageKey/s);
   assert.match(routeSource, /client_created_at: job\.clientCreatedAt/);

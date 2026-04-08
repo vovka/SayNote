@@ -1,5 +1,17 @@
-import type { AIProviderAdapter, CategorizationResult, TranscriptionResult } from '../../../shared/types/provider';
-import { mapHttpFailure, mapInvalidResponse, mapNetworkFailure, ProviderError } from './errors';
+import type {
+  AIProviderAdapter,
+  CategorizeWithReviewResult,
+  TranscriptionResult,
+  UnifiedCategorizationRequest,
+  UnifiedRecategorization
+} from '../../../shared/types/provider';
+import {
+  mapHttpFailure,
+  mapInvalidResponse,
+  mapNetworkFailure,
+  ProviderError,
+  type ProviderErrorOptions
+} from './errors';
 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 
@@ -13,7 +25,7 @@ async function parseResponseBody(response: Response) {
   return response.text();
 }
 
-function getTextFromCategorization(body: JsonRecord) {
+function getTextFromCompletion(body: JsonRecord) {
   const choices = body.choices;
   if (!Array.isArray(choices) || !choices.length) {
     return undefined;
@@ -26,28 +38,83 @@ function getTextFromCategorization(body: JsonRecord) {
   }
 
   const content = (message as JsonRecord).content;
-  if (typeof content === 'string') {
-    return content;
-  }
-
-  return undefined;
+  return typeof content === 'string' ? content : undefined;
 }
 
-function normalizeCategoryPath(rawPath: unknown) {
-  if (!Array.isArray(rawPath)) {
-    throw mapInvalidResponse({ provider: 'groq', operation: 'categorize', reason: 'categoryPath must be an array' });
+function normalizeAssignment(raw: unknown, operation: ProviderErrorOptions['operation']) {
+  if (!raw || typeof raw !== 'object') {
+    throw mapInvalidResponse({ provider: 'groq', operation, reason: 'assignment must be an object' });
   }
 
-  const categoryPath = rawPath
-    .filter((segment): segment is string => typeof segment === 'string')
-    .map((segment) => segment.trim())
-    .filter(Boolean);
+  const assignment = raw as JsonRecord;
+  const selectedCategoryId = typeof assignment.selectedCategoryId === 'string' ? assignment.selectedCategoryId.trim() : undefined;
+  const newCategoryPath = typeof assignment.newCategoryPath === 'string' ? assignment.newCategoryPath.trim() : undefined;
 
-  if (!categoryPath.length) {
-    throw mapInvalidResponse({ provider: 'groq', operation: 'categorize', reason: 'categoryPath was empty' });
+  if (!!selectedCategoryId === !!newCategoryPath) {
+    throw mapInvalidResponse({
+      provider: 'groq',
+      operation,
+      reason: 'exactly one of selectedCategoryId or newCategoryPath is required'
+    });
   }
 
-  return categoryPath;
+  return {
+    selectedCategoryId,
+    newCategoryPath,
+    confidence: typeof assignment.confidence === 'number' ? assignment.confidence : undefined,
+    reason: typeof assignment.reason === 'string' ? assignment.reason : undefined
+  };
+}
+
+function normalizeRecategorizations(raw: unknown) {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .filter((item): item is JsonRecord => Boolean(item) && typeof item === 'object')
+    .map((item): UnifiedRecategorization => {
+      const noteId = typeof item.noteId === 'string' ? item.noteId.trim() : '';
+      if (!noteId) {
+        throw mapInvalidResponse({ provider: 'groq', operation: 'categorizeWithReview', reason: 'recategorization noteId is required' });
+      }
+      const targetCategoryId = typeof item.targetCategoryId === 'string' ? item.targetCategoryId : undefined;
+      return {
+        noteId,
+        ...normalizeAssignment({
+          selectedCategoryId: targetCategoryId ?? item.selectedCategoryId,
+          newCategoryPath: item.newCategoryPath,
+          confidence: item.confidence,
+          reason: item.reason
+        }, 'categorizeWithReview')
+      };
+    });
+}
+
+function buildUnifiedPrompt(payload: UnifiedCategorizationRequest) {
+  return [
+    'Return strict JSON only.',
+    'Schema:',
+    '{"newNoteAssignment":{"selectedCategoryId?":string,"newCategoryPath?":string,"confidence?":number,"reason?":string},"recategorizations":[{"noteId":string,"targetCategoryId?":string,"newCategoryPath?":string,"confidence?":number,"reason?":string}]}',
+    'Rules:',
+    '- Reuse an existing category whenever one fits.',
+    '- Choose the best matching existing category regardless of depth.',
+    '- All category depths are equally valid.',
+    '- Do not prefer 2-level categories.',
+    '- Do not prefer nested categories by default.',
+    '- Do not prefer shallow categories for their own sake.',
+    '- Do not prefer deep categories for their own sake.',
+    '- Depth must be based only on semantic fit and consistency.',
+    '- Create a new category only when no existing category is a good fit.',
+    '- Do not invent synonyms, spelling variants, or casing variants when an existing category fits.',
+    '- Automatic recategorization is optional and best-effort.',
+    '- Only include recategorizations that clearly improve consistency.',
+    '- Returning zero recategorizations is valid.',
+    '- Never move notes into or out of locked categories/subtrees.',
+    '- For each assignment, exactly one of selectedCategoryId/newCategoryPath must be present.',
+    'Payload JSON:',
+    JSON.stringify(payload)
+  ].join('\n');
 }
 
 export class GroqAdapter implements AIProviderAdapter {
@@ -107,10 +174,8 @@ export class GroqAdapter implements AIProviderAdapter {
     };
   }
 
-  async categorize(input: { text: string; model: string; apiKey: string; allowedCategories?: string[] }): Promise<CategorizationResult> {
-    const prompt = `Return strict JSON with keys categoryPath (string[]) and confidence (0..1).\nAllowed categories: ${
-      input.allowedCategories?.join(', ') || 'any'
-    }\nText:\n${input.text}`;
+  async categorizeWithReview(input: { model: string; apiKey: string; payload: UnifiedCategorizationRequest }): Promise<CategorizeWithReviewResult> {
+    const prompt = buildUnifiedPrompt(input.payload);
 
     let response: Response;
     try {
@@ -127,7 +192,7 @@ export class GroqAdapter implements AIProviderAdapter {
           messages: [
             {
               role: 'system',
-              content: 'Classify the note text into a category path. Return JSON only.'
+              content: 'You classify notes. Return strict JSON only with no markdown.'
             },
             {
               role: 'user',
@@ -137,36 +202,33 @@ export class GroqAdapter implements AIProviderAdapter {
         })
       });
     } catch (error) {
-      throw mapNetworkFailure({ provider: 'groq', operation: 'categorize', error });
+      throw mapNetworkFailure({ provider: 'groq', operation: 'categorizeWithReview', error });
     }
 
     const body = await parseResponseBody(response);
     if (!response.ok) {
-      throw mapHttpFailure({ provider: 'groq', operation: 'categorize', status: response.status, body });
+      throw mapHttpFailure({ provider: 'groq', operation: 'categorizeWithReview', status: response.status, body });
     }
 
     if (!body || typeof body !== 'object') {
-      throw mapInvalidResponse({ provider: 'groq', operation: 'categorize', reason: 'non-object response body' });
+      throw mapInvalidResponse({ provider: 'groq', operation: 'categorizeWithReview', reason: 'non-object response body' });
     }
 
-    const content = getTextFromCategorization(body as JsonRecord);
+    const content = getTextFromCompletion(body as JsonRecord);
     if (!content) {
-      throw mapInvalidResponse({ provider: 'groq', operation: 'categorize', reason: 'missing completion content' });
+      throw mapInvalidResponse({ provider: 'groq', operation: 'categorizeWithReview', reason: 'missing completion content' });
     }
 
     let parsed: JsonRecord;
     try {
       parsed = JSON.parse(content) as JsonRecord;
     } catch {
-      throw mapInvalidResponse({ provider: 'groq', operation: 'categorize', reason: 'content was not JSON' });
+      throw mapInvalidResponse({ provider: 'groq', operation: 'categorizeWithReview', reason: 'content was not JSON' });
     }
 
-    const categoryPath = normalizeCategoryPath(parsed.categoryPath);
-    const confidence = typeof parsed.confidence === 'number' ? parsed.confidence : undefined;
-
     return {
-      categoryPath,
-      confidence,
+      newNoteAssignment: normalizeAssignment(parsed.newNoteAssignment, 'categorizeWithReview'),
+      recategorizations: normalizeRecategorizations(parsed.recategorizations),
       raw: body
     };
   }

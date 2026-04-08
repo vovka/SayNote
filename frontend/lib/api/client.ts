@@ -36,6 +36,22 @@ export async function getNotes() {
   return response.json();
 }
 
+export async function getCategories(format: 'tree' | 'flat' = 'tree') {
+  const suffix = format === 'flat' ? '?format=flat' : '';
+  const response = await authFetch(`/api/categories${suffix}`, { cache: 'no-store' });
+  if (!response.ok) throw new Error('Failed to load categories');
+  return response.json();
+}
+
+export async function updateCategoryLock(categoryId: string, isLocked: boolean) {
+  const response = await authFetch(`/api/categories/${categoryId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ isLocked })
+  });
+  if (!response.ok) throw new Error('Failed to update category lock');
+  return response.json();
+}
 
 export async function getAIConfig() {
   const response = await authFetch('/api/settings/ai-config', { cache: 'no-store' });

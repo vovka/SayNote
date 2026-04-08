@@ -1,0 +1,31 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+test('category APIs expose lock state and patch endpoint uses isLocked payload', async () => {
+  const [categoriesRoute, categoryPatchRoute, notesRoute] = await Promise.all([
+    readFile(new URL('../../app/api/categories/route.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../app/api/categories/[id]/route.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../app/api/notes/route.ts', import.meta.url), 'utf8')
+  ]);
+
+  assert.match(categoriesRoute, /isLocked/);
+  assert.match(categoryPatchRoute, /export async function PATCH/);
+  assert.match(categoryPatchRoute, /isLocked/);
+  assert.match(notesRoute, /getNotesTreeForUser/);
+});
+
+test('notes page renders lock icon and toggles lock state via api client', async () => {
+  const [notesPage, apiClient, supabaseServer] = await Promise.all([
+    readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('./client.ts', import.meta.url), 'utf8'),
+    readFile(new URL('./supabase-server.ts', import.meta.url), 'utf8')
+  ]);
+
+  assert.match(notesPage, /🔒/);
+  assert.match(notesPage, /🔓/);
+  assert.match(notesPage, /updateCategoryLock\(/);
+  assert.match(apiClient, /export async function updateCategoryLock/);
+  assert.match(supabaseServer, /is_locked/);
+  assert.match(supabaseServer, /path_cache/);
+});

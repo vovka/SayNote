@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-
-const R2_ALLOWED_MIME_TYPES = new Set(['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav']);
+import { audioFileExtension, toSupportedAudioMimeType } from '../../../shared/audio-mime';
 
 function getRequiredEnv(name: string) {
   const value = process.env[name];
@@ -94,18 +93,7 @@ function mapR2ReadError(error: unknown) {
 }
 
 function extensionForMimeType(mimeType: string) {
-  switch (mimeType) {
-    case 'audio/webm':
-      return 'webm';
-    case 'audio/mp4':
-      return 'mp4';
-    case 'audio/mpeg':
-      return 'mp3';
-    case 'audio/wav':
-      return 'wav';
-    default:
-      return 'bin';
-  }
+  return audioFileExtension(mimeType);
 }
 
 export function buildTemporaryAudioStorageKey(userId: string, clientRecordingId: string, mimeType: string) {
@@ -120,7 +108,8 @@ export function buildIdempotentTemporaryAudioStorageKey(userId: string, idempote
 }
 
 export async function putTemporaryAudio(storageKey: string, bytes: Uint8Array, mimeType: string) {
-  if (!R2_ALLOWED_MIME_TYPES.has(mimeType)) {
+  const normalizedMimeType = toSupportedAudioMimeType(mimeType);
+  if (!normalizedMimeType) {
     throw new Error('Unsupported audio MIME type for upload');
   }
 
@@ -131,7 +120,7 @@ export async function putTemporaryAudio(storageKey: string, bytes: Uint8Array, m
       Bucket: bucket,
       Key: storageKey,
       Body: bytes,
-      ContentType: mimeType,
+      ContentType: normalizedMimeType,
       ContentLength: bytes.byteLength
     })
   );

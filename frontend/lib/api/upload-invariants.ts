@@ -1,16 +1,19 @@
-export const ALLOWED_UPLOAD_MIME_TYPES = new Set(['audio/webm', 'audio/mp4', 'audio/mpeg', 'audio/wav']);
+import { SUPPORTED_AUDIO_MIME_TYPES, toSupportedAudioMimeType } from '../../../shared/audio-mime.ts';
+
+export const ALLOWED_UPLOAD_MIME_TYPES = new Set(SUPPORTED_AUDIO_MIME_TYPES);
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 export function validateUploadInvariants(input: { mimeType: string; sizeBytes: number }) {
-  if (!ALLOWED_UPLOAD_MIME_TYPES.has(input.mimeType)) {
+  const normalizedMimeType = toSupportedAudioMimeType(input.mimeType);
+  if (!normalizedMimeType) {
     return { ok: false as const, status: 415, message: 'Unsupported audio type' };
   }
 
   if (input.sizeBytes > MAX_UPLOAD_BYTES) {
-    return { ok: false as const, status: 413, message: 'Audio file too large' };
+    return { ok: false as const, status: 413, message: 'Audio file too large', normalizedMimeType };
   }
 
-  return { ok: true as const };
+  return { ok: true as const, normalizedMimeType };
 }
 
 export interface UploadJobLike {

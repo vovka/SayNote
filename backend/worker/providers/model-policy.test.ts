@@ -33,3 +33,18 @@ test('validateAIProviderConfig rejects unsupported model combinations', () => {
     assert.equal(result.error.operation, 'transcribe');
   }
 });
+
+test('validateAIProviderConfig reports categorizeWithReview for categorization model failures', () => {
+  const result = validateAIProviderConfig({
+    primaryProvider: 'groq',
+    transcriptionModel: 'whisper-large-v3',
+    categorizationModel: 'openai/gpt-4o-mini'
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'UNSUPPORTED_MODEL_COMBINATION');
+    assert.equal(result.error.provider, 'groq');
+    assert.equal(result.error.operation, 'categorizeWithReview');
+  }
+});

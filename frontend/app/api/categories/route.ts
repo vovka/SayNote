@@ -7,8 +7,8 @@ import { scrubSensitiveFields } from '@/lib/api/safe-logging';
  * GET /api/categories
  *
  * Response contract for frontend consumers:
- * - Default (tree): [{ id, name, children: CategoryNode[] }]
- * - Flat mode (?format=flat): [{ id, parent_id, name }]
+ * - Default (tree): [{ id, name, path, depth, isLocked, children: CategoryNode[] }]
+ * - Flat mode (?format=flat): [{ id, parent_id, name, path, depth, isLocked }]
  */
 export async function GET(request: Request) {
   try {

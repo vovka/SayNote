@@ -13,7 +13,10 @@ create table if not exists categories (
   user_id uuid not null,
   parent_id uuid references categories(id) on delete cascade,
   name text not null,
+  normalized_name text not null,
   path_cache text,
+  normalized_path_cache text not null,
+  is_locked boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -52,6 +55,12 @@ create table if not exists notes (
   metadata jsonb not null default '{}'::jsonb
 );
 
+create table if not exists user_review_cursors (
+  user_id uuid primary key,
+  cursor_after_note_id uuid,
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists user_ai_credentials (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
@@ -85,8 +94,8 @@ create table if not exists ai_credential_update_attempts (
 
 alter table categories drop constraint if exists categories_user_id_parent_id_name_key;
 
-create unique index if not exists categories_user_parent_name_unique_idx
-  on categories (user_id, parent_id, name) nulls not distinct;
+create unique index if not exists categories_user_parent_normalized_name_unique_idx
+  on categories (user_id, parent_id, normalized_name) nulls not distinct;
 
 create index if not exists ai_credential_update_attempts_user_id_created_at_idx
   on ai_credential_update_attempts (user_id, created_at desc);
@@ -101,12 +110,14 @@ alter table notes enable row level security;
 alter table ai_credential_update_attempts enable row level security;
 alter table user_ai_credentials enable row level security;
 alter table user_ai_config enable row level security;
+alter table user_review_cursors enable row level security;
 
 create policy "users_manage_own_profile" on user_profiles using (id = auth.uid()) with check (id = auth.uid());
 create policy "users_manage_own_categories" on categories using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "users_read_own_jobs" on processing_jobs for select using (user_id = auth.uid());
 create policy "users_read_own_notes" on notes for select using (user_id = auth.uid());
 create policy "users_manage_own_ai_config" on user_ai_config using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "users_manage_own_review_cursor" on user_review_cursors using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 revoke all on user_ai_credentials from authenticated;
 grant select (provider, key_fingerprint, created_at, updated_at) on user_ai_credentials to authenticated;
