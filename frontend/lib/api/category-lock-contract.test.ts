@@ -25,7 +25,10 @@ test('notes page renders lock icon and toggles lock state via api client', async
   assert.match(notesPage, /🔒/);
   assert.match(notesPage, /🔓/);
   assert.match(notesPage, /updateCategoryLock\(/);
+  assert.match(notesPage, /reconcileSyncItemsWithNotes/);
+  assert.match(notesPage, /SYNC_JOB_COMPLETED_EVENT/);
   assert.match(apiClient, /export async function updateCategoryLock/);
+  assert.match(apiClient, /clientRecordingId/);
   assert.match(supabaseServer, /is_locked/);
   assert.match(supabaseServer, /path_cache/);
 });

@@ -309,6 +309,7 @@ export async function processJob(
               provider: completedAttempt.provider,
               assignmentMode: 'initial',
               sourceJobId: job.id,
+              clientRecordingId: job.client_recording_id,
               assignedCategoryPath: categorization.newNoteAssignment.newCategoryPath ?? null,
               assignmentConfidence: categorization.newNoteAssignment.confidence ?? null,
               assignmentReason: categorization.newNoteAssignment.reason ?? null
