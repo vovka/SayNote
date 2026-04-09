@@ -32,3 +32,12 @@ test('notes page renders lock icon and toggles lock state via api client', async
   assert.match(supabaseServer, /is_locked/);
   assert.match(supabaseServer, /path_cache/);
 });
+
+test('notes page batches refresh state updates after optional note refetch', async () => {
+  const notesPage = await readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8');
+  assert.match(notesPage, /let nextTrees = await getNotes\(\)/);
+  assert.match(notesPage, /if \(hadNewProcessedItem\) {\s*nextTrees = await getNotes\(\);\s*}/s);
+  assert.match(notesPage, /const sortedTrees = sortCategoryTreeNewestFirst\(nextTrees\)/);
+  assert.match(notesPage, /setTrees\(sortedTrees\)/);
+  assert.match(notesPage, /setSyncItems\(reconcileSyncItemsWithNotes\(buildSyncStatusItems\(items\), flattenNotes\(sortedTrees\)\)\)/);
+});

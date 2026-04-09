@@ -52,13 +52,25 @@ function updateNodeLock(nodes: CategoryNode[], categoryId: string, isLocked: boo
   });
 }
 
+function flattenNotes(nodes: CategoryNode[]): NoteSummary[] {
+  const flattened: NoteSummary[] = [];
+  const stack = [...nodes];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) continue;
+    flattened.push(...current.notes);
+    stack.push(...current.children);
+  }
+  return flattened;
+}
+
 function NotesPageContent() {
   const [trees, setTrees] = useState<CategoryNode[]>([]);
   const [syncItems, setSyncItems] = useState<SyncStatusItem[]>([]);
   const previousStatusesRef = useRef<Map<string, RecordingEntity['status']>>(new Map());
 
   useEffect(() => {
-    const refreshSyncItems = async (notes: NoteSummary[]) => {
+    const refreshAll = async () => {
       const items = await db.recordings
         .orderBy('createdAt')
         .reverse()
@@ -68,32 +80,14 @@ function NotesPageContent() {
       const nextStatuses = new Map(items.map((item) => [item.id, item.status]));
       const hadNewProcessedItem = shouldRefreshNotesForProcessedTransition(previousStatusesRef.current, items);
       previousStatusesRef.current = nextStatuses;
-      const visibleItems = reconcileSyncItemsWithNotes(buildSyncStatusItems(items), notes);
-      setSyncItems(visibleItems);
-      return hadNewProcessedItem;
-    };
 
-    const flattenNotes = (nodes: CategoryNode[]): NoteSummary[] => {
-      const flattened: NoteSummary[] = [];
-      const stack = [...nodes];
-      while (stack.length > 0) {
-        const current = stack.pop();
-        if (!current) continue;
-        flattened.push(...current.notes);
-        stack.push(...current.children);
-      }
-      return flattened;
-    };
-
-    const refreshAll = async () => {
-      const nextTrees = sortCategoryTreeNewestFirst(await getNotes());
-      setTrees(nextTrees);
-      const hadNewProcessedItem = await refreshSyncItems(flattenNotes(nextTrees));
+      let nextTrees = await getNotes();
       if (hadNewProcessedItem) {
-        const refreshedTrees = sortCategoryTreeNewestFirst(await getNotes());
-        setTrees(refreshedTrees);
-        await refreshSyncItems(flattenNotes(refreshedTrees));
+        nextTrees = await getNotes();
       }
+      const sortedTrees = sortCategoryTreeNewestFirst(nextTrees);
+      setTrees(sortedTrees);
+      setSyncItems(reconcileSyncItemsWithNotes(buildSyncStatusItems(items), flattenNotes(sortedTrees)));
     };
 
     void refreshAll();
