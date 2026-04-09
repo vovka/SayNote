@@ -6,6 +6,7 @@ import {
   pickStaleUploadRecoveryQueue,
   pickUploadQueue
 } from './sync-core.ts';
+import { FRONTEND_LIFECYCLE_ORDER } from '@/lib/lifecycle/frontend-lifecycle';
 
 test('pickUploadQueue supports offline->reconnect upload convergence selection', () => {
   const now = '2026-04-07T12:00:00.000Z';
@@ -90,4 +91,13 @@ test('duplicate sync triggers after restart do not duplicate recovered queue sel
 
   assert.deepEqual(firstPick, ['dedupe-1']);
   assert.deepEqual(secondPick, ['dedupe-1']);
+});
+
+test('canonical lifecycle ordering keeps upload and processing transitions monotonic', () => {
+  const index = (stage: string) => FRONTEND_LIFECYCLE_ORDER.indexOf(stage as never);
+  assert.equal(index('recorded_local') < index('queued_upload'), true);
+  assert.equal(index('queued_upload') < index('uploading'), true);
+  assert.equal(index('uploading') < index('transcribing'), true);
+  assert.equal(index('transcribing') < index('processed'), true);
+  assert.equal(index('processed') < index('note_visible'), true);
 });

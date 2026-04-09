@@ -28,7 +28,7 @@ test('buildSyncStatusItems includes pending upload states and excludes processed
   ]);
 
   assert.deepEqual(items.map((item) => item.id), ['uploading', 'queued', 'local']);
-  assert.deepEqual(items.map((item) => item.label), ['Uploading', 'Pending upload', 'Pending upload']);
+  assert.deepEqual(items.map((item) => item.label), ['Uploading', 'Queued for upload', 'Recorded locally']);
 });
 
 test('buildSyncStatusItems includes uploaded waiting processing', () => {
@@ -36,7 +36,7 @@ test('buildSyncStatusItems includes uploaded waiting processing', () => {
     makeRecording({ id: 'waiting', status: 'uploaded_waiting_processing' })
   ]);
 
-  assert.equal(items[0]?.label, 'Pending processing');
+  assert.equal(items[0]?.label, 'Transcribing');
 });
 
 test('buildSyncStatusItems includes retryable failure', () => {
@@ -52,7 +52,17 @@ test('buildSyncStatusItems includes terminal failure', () => {
     makeRecording({ id: 'terminal', status: 'failed_terminal', failedStage: 'processing' })
   ]);
 
-  assert.equal(items[0]?.label, 'Processing failed permanently');
+  assert.equal(items[0]?.label, 'Transcription failed permanently');
+});
+
+test('buildSyncStatusItems maps upload failure labels with canonical terminology', () => {
+  const items = buildSyncStatusItems([
+    makeRecording({ id: 'retry', status: 'failed_retryable', failedStage: 'upload', uploadRetryCount: 3 }),
+    makeRecording({ id: 'terminal', status: 'failed_terminal', failedStage: 'upload' })
+  ]);
+
+  assert.equal(items.find((item) => item.id === 'retry')?.label, 'Upload failed (retry 3)');
+  assert.equal(items.find((item) => item.id === 'terminal')?.label, 'Upload failed permanently');
 });
 
 test('reconcileSyncItemsWithNotes hides pending processing once note exists', () => {

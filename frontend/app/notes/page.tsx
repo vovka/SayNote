@@ -10,6 +10,7 @@ import { shouldRefreshNotesForProcessedTransition } from '@/lib/notes/refresh-po
 import { buildSyncStatusItems, reconcileSyncItemsWithNotes, type SyncStatusItem } from '@/lib/notes/sync-visibility';
 import { sortCategoryTreeNewestFirst } from '@/lib/notes/tree-ordering';
 import { SYNC_JOB_COMPLETED_EVENT } from '@/lib/sync/sync-manager';
+import { isFrontendLifecycleStage, labelForLifecycleStage, lifecycleStageFromRecording } from '@/lib/lifecycle/frontend-lifecycle';
 
 type CategoryNode = NoteCategoryTreeNode;
 
@@ -48,7 +49,12 @@ function CategoryTree({
               style={isHighlighted ? { backgroundColor: '#fff7cc' } : undefined}
             >
               <p>{note.text}</p>
-              <small>{new Date(note.createdAt).toLocaleString()} · {nextPath.join(' > ')}</small>
+              <small>
+                {new Date(note.createdAt).toLocaleString()} · {nextPath.join(' > ')}
+                {' · '}
+                <strong>{labelForLifecycleStage(isFrontendLifecycleStage(note.lifecycleStage) ? note.lifecycleStage : 'note_visible')}</strong>
+                {isHighlighted ? ' · New' : ''}
+              </small>
             </li>
           );
         })}
@@ -161,6 +167,7 @@ function NotesPageContent() {
             {syncItems.map((item) => (
               <li key={item.id} style={{ marginBottom: 10 }}>
                 <strong>{item.label}</strong>
+                <div><small>Stage: {labelForLifecycleStage(lifecycleStageFromRecording(item), item.uploadRetryCount || item.processingRetryCount)}</small></div>
                 <div><small>Recorded: {new Date(item.createdAt).toLocaleString()}</small></div>
                 <div><small>Updated: {new Date(item.statusUpdatedAt).toLocaleString()}</small></div>
                 {item.nextUploadRetryAt ? <div><small>Next upload retry: {new Date(item.nextUploadRetryAt).toLocaleString()}</small></div> : null}

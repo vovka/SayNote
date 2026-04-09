@@ -3,6 +3,7 @@ import { requireUserId } from '@/lib/auth/session';
 import { getJobForUser } from '@/lib/api/supabase-server';
 import { scrubSensitiveFields } from '@/lib/api/safe-logging';
 import { startProcessingJobWorkflow } from '@/lib/api/start-processing-job-workflow';
+import { lifecycleStageFromJobStatus } from '@/lib/lifecycle/frontend-lifecycle';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -23,6 +24,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({
       job_id: job.id,
       status: job.status,
+      lifecycle_stage: lifecycleStageFromJobStatus(job.status),
       error_code: job.error_code ?? null
     });
   } catch (error) {

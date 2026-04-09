@@ -8,6 +8,7 @@ test('sync manager recovers stale uploading items and requeues uploads', async (
   assert.match(source, /db\.recordings\s+\.where\('userId'\)\s+\.equals\(userId\)\s+\.and\(\(item\) => item\.status === 'uploading'\)\s+\.toArray\(\)/);
   assert.match(source, /pickStaleUploadRecoveryQueue\(uploadRecoveryCandidates, nowIso, UPLOADING_STALE_MS\)/);
   assert.match(source, /await db\.recordings\.update\(item\.id, \{\s*status: 'queued_upload',[\s\S]*statusUpdatedAt: nowIso\s*\}\);/);
+  assert.match(source, /lifecycleStage: 'queued_upload'/);
 });
 
 test('sync manager upload replay path is idempotent under ambiguous upload outcomes', async () => {
@@ -16,6 +17,7 @@ test('sync manager upload replay path is idempotent under ambiguous upload outco
   assert.match(source, /form\.append\('idempotencyKey', item\.uploadIdempotencyKey\)/);
   assert.match(source, /const result = await uploadAudio\(form\);/);
   assert.match(source, /status: 'uploaded_waiting_processing'/);
+  assert.match(source, /lifecycleStage: 'transcribing'/);
   assert.match(source, /serverJobId: result\.job_id/);
   assert.match(source, /audioBlob: undefined/);
 });

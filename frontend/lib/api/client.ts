@@ -27,7 +27,12 @@ export async function uploadAudio(formData: FormData) {
 export async function getJob(jobId: string) {
   const response = await authFetch(`/api/jobs/${jobId}`, { cache: 'no-store' });
   if (!response.ok) throw new Error('Job lookup failed');
-  return response.json() as Promise<{ job_id: string; status: 'uploaded' | 'processing' | 'completed' | 'failed_retryable' | 'failed_terminal'; error_code: string | null }>;
+  return response.json() as Promise<{
+    job_id: string;
+    status: 'uploaded' | 'processing' | 'completed' | 'failed_retryable' | 'failed_terminal';
+    lifecycle_stage: string;
+    error_code: string | null;
+  }>;
 }
 
 export interface NoteSummary {
@@ -37,6 +42,7 @@ export interface NoteSummary {
   status?: string;
   sourceJobId?: string;
   clientRecordingId?: string;
+  lifecycleStage?: string;
 }
 
 export interface NoteCategoryTreeNode {
