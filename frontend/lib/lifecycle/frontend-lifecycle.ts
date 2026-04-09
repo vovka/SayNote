@@ -36,16 +36,29 @@ export function lifecycleStageFromJobStatus(status: ServerJobStatus): FrontendLi
 }
 
 export function labelForLifecycleStage(stage: FrontendLifecycleStage, retries = 0): string {
-  if (stage === 'recorded_local') return 'Recorded locally';
-  if (stage === 'queued_upload') return 'Queued for upload';
-  if (stage === 'uploading') return 'Uploading';
-  if (stage === 'uploaded_waiting_processing' || stage === 'transcribing') return 'Transcribing';
-  if (stage === 'processed') return 'Processed';
-  if (stage === 'note_visible') return 'Note visible';
-  if (stage === 'failed_upload_retryable') return `Upload failed (retry ${retries})`;
-  if (stage === 'failed_upload_terminal') return 'Upload failed permanently';
-  if (stage === 'failed_processing_retryable') return `Transcription failed (retry ${retries})`;
-  return 'Transcription failed permanently';
+  switch (stage) {
+    case 'recorded_local':
+      return 'Recorded locally';
+    case 'queued_upload':
+      return 'Queued for upload';
+    case 'uploading':
+      return 'Uploading';
+    case 'uploaded_waiting_processing':
+    case 'transcribing':
+      return 'Transcribing';
+    case 'processed':
+      return 'Processed';
+    case 'note_visible':
+      return 'Note visible';
+    case 'failed_upload_retryable':
+      return `Upload failed (retry ${retries})`;
+    case 'failed_upload_terminal':
+      return 'Upload failed permanently';
+    case 'failed_processing_retryable':
+      return `Transcription failed (retry ${retries})`;
+    case 'failed_processing_terminal':
+      return 'Transcription failed permanently';
+  }
 }
 
 export function isFrontendLifecycleStage(value: string | undefined): value is FrontendLifecycleStage {

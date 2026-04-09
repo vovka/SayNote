@@ -29,6 +29,7 @@ test('sync manager scopes queues and cleanup to the authenticated user', async (
   assert.match(source, /if \(!userId\) return;/);
   assert.match(source, /await recoverStaleSyncState\(userId\);/);
   assert.match(source, /await cleanupSyncedRecords\(userId\);/);
+  assert.match(source, /status: retryCount >= PROCESSING_RETRY_POLICY\.maxRetries \? 'failed_terminal' : 'failed_retryable'/);
   assert.match(source, /modify\(\{ audioBlob: undefined \}\)/);
   assert.match(source, /item\.status === 'failed_terminal' && item\.statusUpdatedAt < terminalFailureBefore/);
 });

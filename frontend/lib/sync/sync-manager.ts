@@ -277,7 +277,7 @@ async function pollJobStatus(id: string) {
     const retryCount = (item.processingRetryCount ?? 0) + 1;
     const delay = computeBackoffMs(retryCount, PROCESSING_RETRY_POLICY.baseMs, PROCESSING_RETRY_POLICY.capMs);
     await db.recordings.update(id, {
-      status: retryCount >= PROCESSING_RETRY_POLICY.maxRetries ? 'failed_terminal' : item.status,
+      status: retryCount >= PROCESSING_RETRY_POLICY.maxRetries ? 'failed_terminal' : 'failed_retryable',
       processingRetryCount: retryCount,
       failedStage: 'processing',
       lastError: error instanceof Error ? error.message : 'Processing status lookup failed',
