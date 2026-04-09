@@ -14,3 +14,12 @@ test('notes page clears highlight tracker when page session ends', async () => {
 
   assert.match(source, /highlightTrackerRef\.current\.reset\(\)/);
 });
+
+
+test('notes page defines refreshAll helper used by polling and focus listeners', async () => {
+  const source = await readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /const refreshAll = \(\) => \{/);
+  assert.match(source, /setInterval\(\(\) => \{\s*void refreshAll\(\);\s*\}, 15_000\);/s);
+  assert.match(source, /window\.addEventListener\('focus', onRefresh\)/);
+});

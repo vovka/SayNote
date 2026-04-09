@@ -125,6 +125,11 @@ function NotesPageContent() {
       setSyncItems(reconcileSyncItemsWithNotes(buildSyncStatusItems(items), flattenNotes(sortedTrees)));
     };
 
+    const refreshAll = () => {
+      void refreshSyncItems();
+      void refreshNotes();
+    };
+
     void refreshAll();
     const timer = setInterval(() => {
       void refreshAll();
