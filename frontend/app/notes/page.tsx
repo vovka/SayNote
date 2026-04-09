@@ -436,6 +436,16 @@ function NotesPageContent() {
                 ref={settingsButtonRef}
                 type="button"
                 onClick={() => setIsSettingsOpen(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  color: '#0070f3',
+                  textDecoration: 'underline',
+                  cursor: 'pointer',
+                  fontSize: 'inherit',
+                  fontFamily: 'inherit'
+                }}
               >
                 Settings
               </button>
