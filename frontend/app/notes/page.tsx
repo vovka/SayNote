@@ -1,6 +1,7 @@
 'use client';
 
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SettingsModal } from '@/components/settings-modal';
 import { AuthGate } from '@/components/auth-gate';
 import { AuthControls } from '@/components/auth-controls';
 import { getCurrentUserId, getNotes, updateCategoryLock, type NoteCategoryTreeNode, type NoteSummary } from '@/lib/api/client';
@@ -154,6 +155,8 @@ function NotesPageContent() {
   const targetLevel = useRef(0);
   const frameHandle = useRef(0);
   const previousVisualState = useRef<RecordingVisualState>('idle');
+  const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     registerServiceWorker();
@@ -295,6 +298,10 @@ function NotesPageContent() {
   }, [recording, userId]);
 
   const isRecordingMode = visualState !== 'idle';
+  const closeSettings = () => {
+    setIsSettingsOpen(false);
+    settingsButtonRef.current?.focus();
+  };
   const pulseAnimation = visualState === 'recording-speaking' ? 'recorder-pulse-fast' : 'recorder-pulse-slow';
   const ringAnimation = visualState === 'recording-speaking' ? 'recorder-ring-fast' : 'recorder-ring-slow';
   const primaryRingScale = 1 + buttonStyle.ringSpread / 100;
@@ -425,11 +432,30 @@ function NotesPageContent() {
             <strong>Quick recorder</strong>
             <p style={{ margin: '6px 0 0', opacity: 0.8 }}>{status}</p>
             <p style={{ margin: '6px 0 0' }}>
-              <a href="/settings">Settings</a>
+              <button
+                ref={settingsButtonRef}
+                type="button"
+                onClick={() => setIsSettingsOpen(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  color: '#0070f3',
+                  textDecoration: 'underline',
+                  cursor: 'pointer',
+                  fontSize: 'inherit',
+                  fontFamily: 'inherit'
+                }}
+              >
+                Settings
+              </button>
             </p>
           </div>
         </div>
       </section>
+
+
+      <SettingsModal isOpen={isSettingsOpen} onClose={closeSettings} />
 
       <style jsx>{`
         @keyframes recorder-pulse-slow {
