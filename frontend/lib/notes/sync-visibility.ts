@@ -1,5 +1,9 @@
 import type { RecordingEntity } from '@/lib/db/indexeddb';
-import { labelForLifecycleStage, lifecycleStageFromRecording } from '../lifecycle/frontend-lifecycle.ts';
+import {
+  labelForLifecycleStage,
+  lifecycleStageFromRecording,
+  type FrontendLifecycleStage
+} from '../lifecycle/frontend-lifecycle.ts';
 
 export interface SyncStatusItem extends RecordingEntity {
   label: string;
@@ -10,11 +14,30 @@ export interface NoteSyncMetadata {
   clientRecordingId?: string;
 }
 
+export interface SyncStageVisual {
+  isBusy: boolean;
+  liveText: string;
+  showSpinner: boolean;
+  stage: FrontendLifecycleStage;
+}
+
 export function buildSyncStatusItems(items: RecordingEntity[]): SyncStatusItem[] {
   return items
     .filter((item) => item.status !== 'processed')
     .sort(compareNewestFirst)
     .map((item) => ({ ...item, label: renderSyncStatus(item) }));
+}
+
+export function getSyncStageVisual(item: RecordingEntity): SyncStageVisual {
+  const stage = lifecycleStageFromRecording(item);
+  const retries = item.failedStage === 'upload' ? item.uploadRetryCount : item.processingRetryCount;
+  const stageLabel = labelForLifecycleStage(stage, retries);
+  if (isInFlightStage(stage)) {
+    const retryingSuffix = stage.includes('retryable') ? '. Retrying.' : '. In progress.';
+    return { stage, showSpinner: true, isBusy: true, liveText: `${stageLabel}${retryingSuffix}` };
+  }
+
+  return { stage, showSpinner: false, isBusy: false, liveText: `${stageLabel}.` };
 }
 
 export function reconcileSyncItemsWithNotes(syncItems: SyncStatusItem[], notes: NoteSyncMetadata[]): SyncStatusItem[] {
@@ -53,4 +76,14 @@ function isCorrelatedPendingProcessing(
   if (correlatedClientIds.has(item.id)) return true;
   if (!item.serverJobId) return false;
   return correlatedJobIds.has(item.serverJobId);
+}
+
+function isInFlightStage(stage: FrontendLifecycleStage): boolean {
+  return (
+    stage === 'uploading' ||
+    stage === 'uploaded_waiting_processing' ||
+    stage === 'transcribing' ||
+    stage === 'failed_upload_retryable' ||
+    stage === 'failed_processing_retryable'
+  );
 }

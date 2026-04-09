@@ -16,7 +16,12 @@ import { getRecordingAnimationVars, getRecordingButtonStyle } from '@/lib/record
 import { getRecordingVisualState, getSmoothedLevel, type RecordingVisualState } from '@/lib/recording/recording-visual-state';
 import { NoteHighlightTracker } from '@/lib/notes/new-note-highlights';
 import { shouldRefreshNotesForProcessedTransition } from '@/lib/notes/refresh-policy';
-import { buildSyncStatusItems, reconcileSyncItemsWithNotes, type SyncStatusItem } from '@/lib/notes/sync-visibility';
+import {
+  buildSyncStatusItems,
+  getSyncStageVisual,
+  reconcileSyncItemsWithNotes,
+  type SyncStatusItem
+} from '@/lib/notes/sync-visibility';
 import { sortCategoryTreeNewestFirst } from '@/lib/notes/tree-ordering';
 import { registerServiceWorker } from '@/lib/pwa/register-sw';
 import { queueRecording, startSyncLoop, SYNC_JOB_COMPLETED_EVENT } from '@/lib/sync/sync-manager';
@@ -314,7 +319,6 @@ function NotesPageContent() {
     '--pulse-brightness-base': buttonStyle.brightness,
     '--pulse-brightness-peak': primaryAnimationVars.pulseBrightnessPeak
   } as CSSProperties;
-
   return (
     <main style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <section style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 240px' }}>
@@ -325,19 +329,30 @@ function NotesPageContent() {
           <p><small>Only local pending and failed sync items render here. Processed notes render in the categorized list below.</small></p>
           {syncItems.length === 0 ? <p>No local sync activity yet.</p> : (
             <ul>
-              {syncItems.map((item) => (
-                <li key={item.id} style={{ marginBottom: 10 }}>
-                  <strong>{item.label}</strong>
-                  <div><small>Stage: {labelForLifecycleStage(lifecycleStageFromRecording(item), item.failedStage === 'upload' ? item.uploadRetryCount : item.processingRetryCount)}</small></div>
-                  <div><small>Recorded: {new Date(item.createdAt).toLocaleString()}</small></div>
-                  <div><small>Updated: {new Date(item.statusUpdatedAt).toLocaleString()}</small></div>
-                  {item.nextUploadRetryAt ? <div><small>Next upload retry: {new Date(item.nextUploadRetryAt).toLocaleString()}</small></div> : null}
-                  {item.nextProcessingRetryAt ? <div><small>Next processing check: {new Date(item.nextProcessingRetryAt).toLocaleString()}</small></div> : null}
-                  {item.uploadCompletedAt ? <div><small>Uploaded: {new Date(item.uploadCompletedAt).toLocaleString()}</small></div> : null}
-                  {item.processedAt ? <div><small>Processed: {new Date(item.processedAt).toLocaleString()}</small></div> : null}
-                  {item.lastError ? <div><small>Error: {item.lastError}</small></div> : null}
-                </li>
-              ))}
+              {syncItems.map((item) => {
+                const visual = getSyncStageVisual(item);
+                const recordedAt = new Date(item.createdAt).toLocaleString();
+                const liveText = `${item.label}. Recorded ${recordedAt}. ${visual.liveText}`;
+                return (
+                  <li key={item.id} style={{ marginBottom: 10 }} aria-busy={visual.isBusy}>
+                    <strong style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      {visual.showSpinner ? <span className="sync-spinner" aria-hidden /> : null}
+                      {item.label}
+                    </strong>
+                    <span className="sync-status-live" role="status">
+                      {liveText}
+                    </span>
+                    <div><small>Stage: {labelForLifecycleStage(lifecycleStageFromRecording(item), item.failedStage === 'upload' ? item.uploadRetryCount : item.processingRetryCount)}</small></div>
+                    <div><small>Recorded: {new Date(item.createdAt).toLocaleString()}</small></div>
+                    <div><small>Updated: {new Date(item.statusUpdatedAt).toLocaleString()}</small></div>
+                    {item.nextUploadRetryAt ? <div><small>Next upload retry: {new Date(item.nextUploadRetryAt).toLocaleString()}</small></div> : null}
+                    {item.nextProcessingRetryAt ? <div><small>Next processing check: {new Date(item.nextProcessingRetryAt).toLocaleString()}</small></div> : null}
+                    {item.uploadCompletedAt ? <div><small>Uploaded: {new Date(item.uploadCompletedAt).toLocaleString()}</small></div> : null}
+                    {item.processedAt ? <div><small>Processed: {new Date(item.processedAt).toLocaleString()}</small></div> : null}
+                    {item.lastError ? <div><small>Error: {item.lastError}</small></div> : null}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -473,6 +488,34 @@ function NotesPageContent() {
         @keyframes recorder-ring-fast {
           0%, 100% { opacity: var(--ring-opacity-base); transform: scale(var(--ring-scale-base)); }
           50% { opacity: var(--ring-opacity-peak); transform: scale(var(--ring-scale-peak)); }
+        }
+        @keyframes sync-status-spin {
+          to { transform: rotate(360deg); }
+        }
+        .sync-spinner {
+          width: 0.8rem;
+          height: 0.8rem;
+          border: 2px solid #d1d5db;
+          border-top-color: #111827;
+          border-radius: 9999px;
+          animation: sync-status-spin 0.8s linear infinite;
+        }
+        .sync-status-live {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .sync-spinner {
+            animation: none;
+            border-top-color: #6b7280;
+          }
         }
       `}</style>
     </main>

@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { RecordingEntity } from '@/lib/db/indexeddb';
-import { buildSyncStatusItems, reconcileSyncItemsWithNotes } from './sync-visibility.ts';
+import {
+  buildSyncStatusItems,
+  getSyncStageVisual,
+  reconcileSyncItemsWithNotes
+} from './sync-visibility.ts';
 
 function makeRecording(overrides: Partial<RecordingEntity>): RecordingEntity {
   return {
@@ -78,4 +82,24 @@ test('reconcileSyncItemsWithNotes hides pending processing once note exists', ()
   }]);
 
   assert.deepEqual(visibleItems.map((item) => item.id), ['rec-uploading', 'rec-keep']);
+});
+
+test('getSyncStageVisual marks uploading and transcribing stages as busy progress', () => {
+  const uploading = getSyncStageVisual(makeRecording({ status: 'uploading' }));
+  const transcribing = getSyncStageVisual(makeRecording({ status: 'uploaded_waiting_processing' }));
+
+  assert.equal(uploading.showSpinner, true);
+  assert.equal(uploading.isBusy, true);
+  assert.equal(transcribing.showSpinner, true);
+  assert.equal(transcribing.isBusy, true);
+});
+
+test('getSyncStageVisual marks retryable failures as retrying progress', () => {
+  const retrying = getSyncStageVisual(
+    makeRecording({ status: 'failed_retryable', failedStage: 'processing', processingRetryCount: 1 })
+  );
+
+  assert.equal(retrying.showSpinner, true);
+  assert.equal(retrying.isBusy, true);
+  assert.equal(retrying.liveText, 'Transcription failed (retry 1). Retrying.');
 });
