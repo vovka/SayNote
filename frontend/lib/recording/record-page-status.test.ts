@@ -7,7 +7,8 @@ test('notes page wires recording lifecycle polling and sync loop', async () => {
 
   assert.match(source, /const RECORDING_STATUS_POLL_INTERVAL_MS = 1_000;/);
   assert.match(source, /const stopSyncLoop = startSyncLoop\(\);/);
-  assert.match(source, /db\.recordings\.where\(\{ userId \}\)\.orderBy\('createdAt'\)\.reverse\(\)\.first\(\)/);
+  assert.match(source, /db\.recordings\.where\('userId'\)\.equals\(userId\)\.toArray\(\)/);
+  assert.match(source, /db\.recordings\.orderBy\('createdAt'\)\.reverse\(\)\.filter/);
   assert.match(source, /setInterval\(\(\) => void refreshLatestRecording\(\), RECORDING_STATUS_POLL_INTERVAL_MS\)/);
   assert.match(source, /setStatusHint\(labelForLifecycleStage\('recorded_local'\)\)/);
 });
