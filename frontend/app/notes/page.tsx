@@ -312,8 +312,6 @@ function NotesPageContent() {
     '--pulse-brightness-base': buttonStyle.brightness,
     '--pulse-brightness-peak': primaryAnimationVars.pulseBrightnessPeak
   } as CSSProperties;
-  const hasInFlightSync = syncItems.some((item) => getSyncStageVisual(item).isBusy);
-
   return (
     <main style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <section style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 240px' }}>
@@ -323,17 +321,19 @@ function NotesPageContent() {
           <h2>Sync status</h2>
           <p><small>Only local pending and failed sync items render here. Processed notes render in the categorized list below.</small></p>
           {syncItems.length === 0 ? <p>No local sync activity yet.</p> : (
-            <ul aria-live="polite" aria-busy={hasInFlightSync}>
+            <ul>
               {syncItems.map((item) => {
                 const visual = getSyncStageVisual(item);
+                const recordedAt = new Date(item.createdAt).toLocaleString();
+                const liveText = `${item.label}. Recorded ${recordedAt}. ${visual.liveText}`;
                 return (
                   <li key={item.id} style={{ marginBottom: 10 }} aria-busy={visual.isBusy}>
                     <strong style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                       {visual.showSpinner ? <span className="sync-spinner" aria-hidden /> : null}
                       {item.label}
                     </strong>
-                    <span className="sync-status-live" role="status" aria-live="polite">
-                      {visual.liveText}
+                    <span className="sync-status-live" role="status">
+                      {liveText}
                     </span>
                     <div><small>Stage: {labelForLifecycleStage(lifecycleStageFromRecording(item), item.failedStage === 'upload' ? item.uploadRetryCount : item.processingRetryCount)}</small></div>
                     <div><small>Recorded: {new Date(item.createdAt).toLocaleString()}</small></div>
