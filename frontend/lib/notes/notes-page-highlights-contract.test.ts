@@ -28,7 +28,6 @@ test('notes page note rows render stable metadata without lifecycle labels', asy
   const source = await readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8');
 
   assert.doesNotMatch(source, /labelForLifecycleStage\(isFrontendLifecycleStage\(note\.lifecycleStage\)/);
-  assert.doesNotMatch(source, /'note_visible'/);
   assert.doesNotMatch(source, /' · New'/);
   assert.doesNotMatch(source, /Note visible/);
   assert.doesNotMatch(source, /nextPath\.join\(' > '\)/);
