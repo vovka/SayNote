@@ -375,9 +375,10 @@ function NotesPageContent() {
     setTrees((previous) => deleteNode(previous, node.id));
     try {
       await deleteCategory(node.id);
-    } catch {
+    } catch (error) {
       setTrees(previousTrees);
-      setActionError(`Failed to delete category ${node.name}.`);
+      const message = error instanceof Error ? error.message : `Failed to delete category ${node.name}.`;
+      setActionError(message);
     }
   };
 

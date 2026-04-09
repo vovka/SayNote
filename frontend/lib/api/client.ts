@@ -18,6 +18,14 @@ async function authFetch(input: RequestInfo | URL, init?: RequestInit) {
   });
 }
 
+async function readApiError(response: Response, fallbackMessage: string) {
+  const payload = await response.json().catch(() => null) as { error?: unknown; errorCode?: unknown } | null;
+  if (payload?.errorCode === 'CATEGORY_HAS_DEPENDENCIES') {
+    return 'Cannot delete category with notes or sub-categories.';
+  }
+  return typeof payload?.error === 'string' ? payload.error : fallbackMessage;
+}
+
 export async function uploadAudio(formData: FormData) {
   const response = await authFetch('/api/audio/upload', { method: 'POST', body: formData });
   if (!response.ok) throw new Error('Upload failed');
@@ -90,7 +98,7 @@ export async function renameCategory(categoryId: string, name: string) {
 
 export async function deleteCategory(categoryId: string) {
   const response = await authFetch(`/api/categories/${categoryId}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error('Failed to delete category');
+  if (!response.ok) throw new Error(await readApiError(response, 'Failed to delete category'));
   return response.json();
 }
 

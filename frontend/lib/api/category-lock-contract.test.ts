@@ -15,6 +15,8 @@ test('category APIs expose lock state and patch endpoint uses isLocked payload',
   assert.match(categoryRoute, /export async function DELETE/);
   assert.match(categoryRoute, /isLocked/);
   assert.match(categoryRoute, /name/);
+  assert.match(categoryRoute, /patchCategoryForUser/);
+  assert.doesNotMatch(categoryRoute, /if \(typeof body\.isLocked === 'boolean'\) \{[\s\S]*return NextResponse\.json\(updated\);\s*}\s*\n\s*if \(typeof body\.name === 'string'\)/);
   assert.match(notesRoute, /getNotesTreeForUser/);
   assert.match(noteRoute, /export async function PATCH/);
   assert.match(noteRoute, /export async function DELETE/);
@@ -52,7 +54,10 @@ test('notes page renders accessible lock state control and toggles lock state vi
   assert.match(supabaseServer, /deleteNoteForUser/);
   assert.match(supabaseServer, /renameCategoryForUser/);
   assert.match(supabaseServer, /deleteCategoryForUser/);
+  assert.match(supabaseServer, /path_cache: nextPathCacheByCategoryId\.get/);
+  assert.match(supabaseServer, /collectDescendantCategoryIds/);
   assert.match(supabaseServer, /path_cache/);
+  assert.match(apiClient, /CATEGORY_HAS_DEPENDENCIES/);
 });
 
 test('notes page batches refresh state updates after optional note refetch', async () => {
