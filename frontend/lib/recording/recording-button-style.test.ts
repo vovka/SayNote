@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getRecordingAnimationVars, getRecordingButtonStyle } from './recording-button-style.ts';
+import { getRecordingAnimationVars, getRecordingButtonStyle } from './recording-button-style';
 
 test('keeps silent mode breathing visible at very low levels', () => {
   const style = getRecordingButtonStyle('recording-silent', 0.01);
