@@ -1,13 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import {
+  getRecordingVisualState,
+  getSmoothedLevel,
+  SPEAKING_LEVEL_THRESHOLD
+} from '../lib/recording/recording-visual-state.ts';
 
-test('record page includes contract for idle, silent, and speaking animation states', async () => {
-  const pageSource = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
+test('recording visual state transitions between idle, silent, and speaking', () => {
+  assert.equal(getRecordingVisualState(false, 1), 'idle');
+  assert.equal(getRecordingVisualState(true, 0), 'recording-silent');
+  assert.equal(getRecordingVisualState(true, SPEAKING_LEVEL_THRESHOLD + 0.01), 'recording-speaking');
+});
 
-  assert.match(pageSource, /type RecordingVisualState = 'idle' \| 'recording-silent' \| 'recording-speaking';/);
-  assert.match(pageSource, /const SPEAKING_LEVEL_THRESHOLD = 0\.08;/);
-  assert.match(pageSource, /const visualState = recording\s*\? level > SPEAKING_LEVEL_THRESHOLD\s*\? 'recording-speaking'\s*:\s*'recording-silent'\s*:\s*'idle';/);
-  assert.match(pageSource, /const unsubscribe = subscribeToRecordingLevel\(\(nextLevel\) => \{/);
-  assert.match(pageSource, /requestAnimationFrame\(/);
+test('smoothed level snaps to exact target when near threshold', () => {
+  const target = 0.2;
+  const nearTarget = target - 0.0004;
+  const result = getSmoothedLevel(nearTarget, target);
+
+  assert.equal(result.shouldContinue, false);
+  assert.equal(result.next, target);
 });

@@ -13,6 +13,12 @@ const levelListeners = new Set<RecordingLevelListener>();
 
 const MIME_TYPE_PREFERENCES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'] as const;
 
+let createMeter = createAudioLevelMeter;
+
+export function setAudioLevelMeterFactoryForTest(factory: typeof createAudioLevelMeter | null) {
+  createMeter = factory ?? createAudioLevelMeter;
+}
+
 function pickSupportedMimeType() {
   if (typeof MediaRecorder.isTypeSupported !== 'function') return '';
   return MIME_TYPE_PREFERENCES.find((value) => MediaRecorder.isTypeSupported(value)) ?? '';
@@ -62,7 +68,7 @@ export async function startRecording() {
     activeStream = stream;
     activeRecorder = recorder;
     activeMimeType = recorder.mimeType || mimeType;
-    activeMeter = createAudioLevelMeter(stream);
+    activeMeter = createMeter(stream);
     activeMeterUnsubscribe = activeMeter.subscribe(notifyLevel);
     activeMeter?.start();
     chunks = [];

@@ -12,10 +12,7 @@ import {
 import { queueRecording, startSyncLoop } from '@/lib/sync/sync-manager';
 import { registerServiceWorker } from '@/lib/pwa/register-sw';
 import { getCurrentUserId } from '@/lib/api/client';
-
-type RecordingVisualState = 'idle' | 'recording-silent' | 'recording-speaking';
-
-const SPEAKING_LEVEL_THRESHOLD = 0.08;
+import { getRecordingVisualState, getSmoothedLevel } from '@/lib/recording/recording-visual-state';
 
 function RecordPageContent() {
   const [recording, setRecording] = useState(false);
@@ -33,10 +30,8 @@ function RecordPageContent() {
     const flushLevel = () => {
       frameHandle.current = 0;
       setLevel((current) => {
-        const next = current + (targetLevel.current - current) * 0.35;
-        if (Math.abs(next - targetLevel.current) > 0.005) {
-          frameHandle.current = requestAnimationFrame(flushLevel);
-        }
+        const { next, shouldContinue } = getSmoothedLevel(current, targetLevel.current);
+        if (shouldContinue) frameHandle.current = requestAnimationFrame(flushLevel);
         return next;
       });
     };
@@ -55,11 +50,7 @@ function RecordPageContent() {
   }, []);
 
   const buttonText = useMemo(() => (recording ? 'Stop' : 'Record'), [recording]);
-  const visualState = recording
-    ? level > SPEAKING_LEVEL_THRESHOLD
-      ? 'recording-speaking'
-      : 'recording-silent'
-    : 'idle';
+  const visualState = getRecordingVisualState(recording, level);
 
   const scale = visualState === 'recording-speaking' ? 1 + Math.min(level, 0.5) * 0.25 : 1;
   const glow = visualState === 'recording-speaking' ? Math.round(level * 50) : 8;
