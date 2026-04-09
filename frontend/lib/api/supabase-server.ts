@@ -333,7 +333,7 @@ export async function getNotesTreeForUser(userId: string) {
     getCategoriesTreeForUser(userId),
     supabase
       .from('notes')
-      .select('id,category_id,text,created_at')
+      .select('id,category_id,text,created_at,source_job_id,metadata')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .order('id', { ascending: true })
@@ -342,14 +342,30 @@ export async function getNotesTreeForUser(userId: string) {
   if (notesResult.error) throw notesResult.error;
 
   const notes = notesResult.data ?? [];
+  const sourceJobIds = Array.from(new Set(
+    notes
+      .map((note) => note.source_job_id as string | null)
+      .filter((value): value is string => Boolean(value))
+  ));
+  const jobIdToClientRecordingId = await loadClientRecordingIds(supabase, userId, sourceJobIds);
 
-  const notesByCategory = new Map<string, Array<{ id: string; text: string; createdAt: string }>>();
+  const notesByCategory = new Map<string, Array<{
+    id: string;
+    text: string;
+    createdAt: string;
+    sourceJobId?: string;
+    clientRecordingId?: string;
+  }>>();
   for (const note of notes) {
     const arr = notesByCategory.get(note.category_id as string) ?? [];
+    const metadata = parseNoteMetadata(note.metadata);
+    const sourceJobId = (note.source_job_id as string | null) ?? metadata.sourceJobId;
     arr.push({
       id: note.id as string,
       text: note.text as string,
-      createdAt: note.created_at as string
+      createdAt: note.created_at as string,
+      sourceJobId: sourceJobId ?? undefined,
+      clientRecordingId: metadata.clientRecordingId ?? (sourceJobId ? jobIdToClientRecordingId.get(sourceJobId) : undefined)
     });
     notesByCategory.set(note.category_id as string, arr);
   }
@@ -368,4 +384,39 @@ export async function getNotesTreeForUser(userId: string) {
     }));
 
   return attachNotes(categories);
+}
+
+interface NoteMetadata {
+  sourceJobId?: string;
+  clientRecordingId?: string;
+}
+
+function parseNoteMetadata(rawMetadata: unknown): NoteMetadata {
+  if (!rawMetadata || typeof rawMetadata !== 'object') return {};
+  const metadata = rawMetadata as Record<string, unknown>;
+  return {
+    sourceJobId: typeof metadata.sourceJobId === 'string' ? metadata.sourceJobId : undefined,
+    clientRecordingId: typeof metadata.clientRecordingId === 'string' ? metadata.clientRecordingId : undefined
+  };
+}
+
+async function loadClientRecordingIds(
+  supabase: ReturnType<typeof getSupabase>,
+  userId: string,
+  sourceJobIds: string[]
+): Promise<Map<string, string>> {
+  if (sourceJobIds.length === 0) return new Map();
+  const jobsResult = await supabase
+    .from('processing_jobs')
+    .select('id,client_recording_id')
+    .eq('user_id', userId)
+    .in('id', sourceJobIds);
+
+  if (jobsResult.error) throw jobsResult.error;
+
+  return new Map(
+    (jobsResult.data ?? [])
+      .filter((job) => typeof job.id === 'string' && typeof job.client_recording_id === 'string')
+      .map((job) => [job.id as string, job.client_recording_id as string])
+  );
 }
