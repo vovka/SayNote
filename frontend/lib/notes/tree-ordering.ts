@@ -4,35 +4,41 @@ export interface NoteListNode {
   children: NoteListNode[];
 }
 
+type SortedNodeResult<T extends NoteListNode> = {
+  node: T;
+  activity: number;
+};
+
 export function sortCategoryTreeNewestFirst<T extends NoteListNode>(nodes: T[]): T[] {
-  return nodes.map(sortNodeNewestFirst);
+  return nodes.map((node) => sortNodeWithActivity(node).node);
 }
 
-function sortNodeNewestFirst<T extends NoteListNode>(node: T): T {
-  return { ...node, notes: sortNotesNewestFirst(node.notes), children: sortChildrenByActivity(node.children) };
-}
-
-function sortChildrenByActivity<T extends NoteListNode>(children: T[]): T[] {
-  const childEntries = children.map((child, index) => createChildEntry(sortNodeNewestFirst(child), index));
+function sortNodeWithActivity<T extends NoteListNode>(node: T): SortedNodeResult<T> {
+  const childEntries = node.children.map((child, index) => sortChildWithIndex(child, index));
   childEntries.sort(compareByLatestActivity);
-  return childEntries.map((entry) => entry.child);
+  const sortedNode = {
+    ...node,
+    notes: sortNotesNewestFirst(node.notes),
+    children: childEntries.map((entry) => entry.node)
+  };
+  const ownActivity = getLatestNoteTimestamp(sortedNode.notes);
+  const childActivity = childEntries.reduce(maxChildEntryActivity, Number.NEGATIVE_INFINITY);
+  return { node: sortedNode, activity: Math.max(ownActivity, childActivity) };
+}
+
+function sortChildWithIndex<T extends NoteListNode>(child: T, index: number) {
+  return { ...sortNodeWithActivity(child), index };
 }
 
 function compareByLatestActivity<T extends NoteListNode>(
-  left: { index: number; child: T; activity: number },
-  right: { index: number; child: T; activity: number }
+  left: SortedNodeResult<T> & { index: number },
+  right: SortedNodeResult<T> & { index: number }
 ): number {
   const activityDiff = right.activity - left.activity;
   if (activityDiff !== 0) return activityDiff;
-  const idDiff = left.child.id.localeCompare(right.child.id);
+  const idDiff = left.node.id.localeCompare(right.node.id);
   if (idDiff !== 0) return idDiff;
   return left.index - right.index;
-}
-
-function getLatestActivityTimestamp(node: NoteListNode): number {
-  const ownLatest = getLatestNoteTimestamp(node.notes);
-  const childLatest = node.children.reduce(maxChildActivity, Number.NEGATIVE_INFINITY);
-  return Math.max(ownLatest, childLatest);
 }
 
 function getLatestNoteTimestamp(notes: { createdAt: string }[]): number {
@@ -52,14 +58,13 @@ function compareNotesNewestFirst(
   return right.id.localeCompare(left.id);
 }
 
-function maxChildActivity(latest: number, child: NoteListNode): number {
-  return Math.max(latest, getLatestActivityTimestamp(child));
-}
-
 function maxNoteTimestamp(latest: number, note: { createdAt: string }): number {
   return Math.max(latest, Date.parse(note.createdAt));
 }
 
-function createChildEntry<T extends NoteListNode>(child: T, index: number) {
-  return { index, child, activity: getLatestActivityTimestamp(child) };
+function maxChildEntryActivity<T extends NoteListNode>(
+  latest: number,
+  childEntry: SortedNodeResult<T> & { index: number }
+): number {
+  return Math.max(latest, childEntry.activity);
 }
