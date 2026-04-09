@@ -72,11 +72,9 @@ function CategoryTree({
 }) {
   const [isLockControlFocused, setLockControlFocused] = useState(false);
   const nextPath = [...path, node.name];
-  const lockStateLabel = node.isLocked ? 'Locked' : 'Unlocked';
   const lockControlStyle: CSSProperties = {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: 6,
     borderRadius: 999,
     border: node.isLocked ? '1px solid #1f2937' : '1px solid #374151',
     backgroundColor: node.isLocked ? '#1f2937' : '#ffffff',
@@ -104,8 +102,7 @@ function CategoryTree({
           onBlur={() => setLockControlFocused(false)}
           onClick={() => onToggleLock(node)}
         >
-          <span aria-hidden="true">{node.isLocked ? '🔒' : '🔓'}</span>
-          <span>{lockStateLabel}</span>
+          <span aria-hidden="true">{node.isLocked ? '🔐' : '🔓'}</span>
         </button>
       </h3>
       <ul>
