@@ -4,7 +4,17 @@ import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState }
 import { SettingsModal } from '@/components/settings-modal';
 import { AuthGate } from '@/components/auth-gate';
 import { AuthControls } from '@/components/auth-controls';
-import { getCurrentUserId, getNotes, updateCategoryLock, type NoteCategoryTreeNode, type NoteSummary } from '@/lib/api/client';
+import {
+  deleteCategory,
+  deleteNote,
+  getCurrentUserId,
+  getNotes,
+  renameCategory,
+  updateCategoryLock,
+  updateNote,
+  type NoteCategoryTreeNode,
+  type NoteSummary
+} from '@/lib/api/client';
 import { db, type RecordingEntity } from '@/lib/db/indexeddb';
 import {
   cancelRecording,
@@ -69,11 +79,19 @@ function CategoryTree({
   node,
   path = [],
   onToggleLock,
+  onRenameCategory,
+  onDeleteCategory,
+  onEditNote,
+  onDeleteNote,
   highlightedNoteIds
 }: {
   node: CategoryNode;
   path?: string[];
   onToggleLock: (node: CategoryNode) => void;
+  onRenameCategory: (node: CategoryNode) => void;
+  onDeleteCategory: (node: CategoryNode) => void;
+  onEditNote: (categoryId: string, note: NoteSummary) => void;
+  onDeleteNote: (categoryId: string, note: NoteSummary) => void;
   highlightedNoteIds: Set<string>;
 }) {
   const [isLockControlFocused, setLockControlFocused] = useState(false);
@@ -113,6 +131,8 @@ function CategoryTree({
         >
           <span aria-hidden="true">{node.isLocked ? '🔐' : '🔓'}</span>
         </button>
+        <button type="button" onClick={() => onRenameCategory(node)}>Rename</button>
+        <button type="button" onClick={() => onDeleteCategory(node)}>Delete</button>
       </h3>
       <ul>
         {node.notes.map((note) => {
@@ -125,6 +145,10 @@ function CategoryTree({
             >
               <p style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
                 <span>{note.text}</span>
+                <span style={{ display: 'inline-flex', gap: 8 }}>
+                  <button type="button" onClick={() => onEditNote(node.id, note)}>Edit</button>
+                  <button type="button" onClick={() => onDeleteNote(node.id, note)}>Delete</button>
+                </span>
                 <small style={{ color: '#6b7280' }}>{new Date(note.createdAt).toLocaleString()}</small>
               </p>
             </li>
@@ -137,6 +161,10 @@ function CategoryTree({
           node={child}
           path={nextPath}
           onToggleLock={onToggleLock}
+          onRenameCategory={onRenameCategory}
+          onDeleteCategory={onDeleteCategory}
+          onEditNote={onEditNote}
+          onDeleteNote={onDeleteNote}
           highlightedNoteIds={highlightedNoteIds}
         />
       ))}
@@ -154,6 +182,32 @@ function updateNodeLock(nodes: CategoryNode[], categoryId: string, isLocked: boo
       ...node,
       children: updateNodeLock(node.children, categoryId, isLocked)
     };
+  });
+}
+
+function renameNode(nodes: CategoryNode[], categoryId: string, name: string): CategoryNode[] {
+  return nodes.map((node) => (node.id === categoryId
+    ? { ...node, name }
+    : { ...node, children: renameNode(node.children, categoryId, name) }));
+}
+
+function deleteNode(nodes: CategoryNode[], categoryId: string): CategoryNode[] {
+  return nodes
+    .filter((node) => node.id !== categoryId)
+    .map((node) => ({ ...node, children: deleteNode(node.children, categoryId) }));
+}
+
+function updateNodeNoteText(nodes: CategoryNode[], categoryId: string, noteId: string, text: string): CategoryNode[] {
+  return nodes.map((node) => {
+    if (node.id !== categoryId) return { ...node, children: updateNodeNoteText(node.children, categoryId, noteId, text) };
+    return { ...node, notes: node.notes.map((note) => (note.id === noteId ? { ...note, text } : note)) };
+  });
+}
+
+function deleteNodeNote(nodes: CategoryNode[], categoryId: string, noteId: string): CategoryNode[] {
+  return nodes.map((node) => {
+    if (node.id !== categoryId) return { ...node, children: deleteNodeNote(node.children, categoryId, noteId) };
+    return { ...node, notes: node.notes.filter((note) => note.id !== noteId) };
   });
 }
 
@@ -296,6 +350,61 @@ function NotesPageContent() {
       await updateCategoryLock(node.id, nextLocked);
     } catch {
       setTrees((previous) => updateNodeLock(previous, node.id, node.isLocked));
+      setActionError(`Failed to update lock for ${node.name}.`);
+    }
+  };
+
+  const handleRenameCategory = async (node: CategoryNode) => {
+    const nextName = window.prompt('Rename category', node.name)?.trim();
+    if (!nextName || nextName === node.name) return;
+    const previousTrees = trees;
+    setActionError(null);
+    setTrees((previous) => renameNode(previous, node.id, nextName));
+    try {
+      await renameCategory(node.id, nextName);
+    } catch {
+      setTrees(previousTrees);
+      setActionError(`Failed to rename category ${node.name}.`);
+    }
+  };
+
+  const handleDeleteCategory = async (node: CategoryNode) => {
+    if (!window.confirm(`Delete category "${node.name}"?`)) return;
+    const previousTrees = trees;
+    setActionError(null);
+    setTrees((previous) => deleteNode(previous, node.id));
+    try {
+      await deleteCategory(node.id);
+    } catch {
+      setTrees(previousTrees);
+      setActionError(`Failed to delete category ${node.name}.`);
+    }
+  };
+
+  const handleEditNote = async (categoryId: string, note: NoteSummary) => {
+    const nextText = window.prompt('Edit note', note.text)?.trim();
+    if (!nextText || nextText === note.text) return;
+    const previousTrees = trees;
+    setActionError(null);
+    setTrees((previous) => updateNodeNoteText(previous, categoryId, note.id, nextText));
+    try {
+      await updateNote(note.id, nextText);
+    } catch {
+      setTrees(previousTrees);
+      setActionError('Failed to update note.');
+    }
+  };
+
+  const handleDeleteNote = async (categoryId: string, note: NoteSummary) => {
+    if (!window.confirm('Delete this note?')) return;
+    const previousTrees = trees;
+    setActionError(null);
+    setTrees((previous) => deleteNodeNote(previous, categoryId, note.id));
+    try {
+      await deleteNote(note.id);
+    } catch {
+      setTrees(previousTrees);
+      setActionError('Failed to delete note.');
     }
   };
 
@@ -381,13 +490,17 @@ function NotesPageContent() {
           )}
         </section>
         {trees.map((node) => (
-          <CategoryTree
-            key={node.id}
-            node={node}
-            onToggleLock={handleToggleLock}
-            highlightedNoteIds={highlightedNoteIds}
-          />
-        ))}
+            <CategoryTree
+              key={node.id}
+              node={node}
+              onToggleLock={handleToggleLock}
+              onRenameCategory={handleRenameCategory}
+              onDeleteCategory={handleDeleteCategory}
+              onEditNote={handleEditNote}
+              onDeleteNote={handleDeleteNote}
+              highlightedNoteIds={highlightedNoteIds}
+            />
+          ))}
       </section>
 
       <section

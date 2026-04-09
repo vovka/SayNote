@@ -78,6 +78,38 @@ export async function updateCategoryLock(categoryId: string, isLocked: boolean) 
   return response.json();
 }
 
+export async function renameCategory(categoryId: string, name: string) {
+  const response = await authFetch(`/api/categories/${categoryId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  if (!response.ok) throw new Error('Failed to rename category');
+  return response.json();
+}
+
+export async function deleteCategory(categoryId: string) {
+  const response = await authFetch(`/api/categories/${categoryId}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error('Failed to delete category');
+  return response.json();
+}
+
+export async function updateNote(noteId: string, text: string) {
+  const response = await authFetch(`/api/notes/${noteId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text })
+  });
+  if (!response.ok) throw new Error('Failed to update note');
+  return response.json();
+}
+
+export async function deleteNote(noteId: string) {
+  const response = await authFetch(`/api/notes/${noteId}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error('Failed to delete note');
+  return response.json();
+}
+
 export async function getAIConfig() {
   const response = await authFetch('/api/settings/ai-config', { cache: 'no-store' });
   if (!response.ok) throw new Error('Failed to load AI config');

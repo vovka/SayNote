@@ -157,6 +157,62 @@ export async function updateCategoryLock(userId: string, categoryId: string, isL
   };
 }
 
+export async function renameCategoryForUser(userId: string, categoryId: string, name: string) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('categories')
+    .update({ name, updated_at: new Date().toISOString() })
+    .eq('id', categoryId)
+    .eq('user_id', userId)
+    .select('id,parent_id,name,path_cache,is_locked')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const row = data as CategoryRow;
+  const path = getPath(row);
+  return { id: row.id, parent_id: row.parent_id, name: row.name, path, depth: path.split('>').length, isLocked: row.is_locked };
+}
+
+export async function deleteCategoryForUser(userId: string, categoryId: string) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('categories')
+    .delete()
+    .eq('id', categoryId)
+    .eq('user_id', userId)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+export async function updateNoteForUser(userId: string, noteId: string, text: string) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('notes')
+    .update({ text, updated_at: new Date().toISOString() })
+    .eq('id', noteId)
+    .eq('user_id', userId)
+    .select('id,text,created_at')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return { id: data.id as string, text: data.text as string, createdAt: data.created_at as string };
+}
+
+export async function deleteNoteForUser(userId: string, noteId: string) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('notes')
+    .delete()
+    .eq('id', noteId)
+    .eq('user_id', userId)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
 export async function getUploadJobByIdempotencyKey(userId: string, idempotencyKey: string) {
   const supabase = getSupabase();
   const { data, error } = await supabase
