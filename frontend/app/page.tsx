@@ -121,8 +121,11 @@ function RecordPageContent() {
 
   const buttonText = useMemo(() => (recording ? 'Stop' : 'Record'), [recording]);
   const visualState = getRecordingVisualState(recording, level, previousVisualState.current);
-  previousVisualState.current = visualState;
   const buttonStyle = getRecordingButtonStyle(visualState, level);
+
+  useEffect(() => {
+    previousVisualState.current = visualState;
+  }, [visualState]);
 
   const status = useMemo(() => {
     if (actionError) return actionError;
