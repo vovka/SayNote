@@ -38,7 +38,12 @@ test('notes page refreshAll helper keeps highlighting and refresh wiring', async
 
   assert.match(source, /const refreshAll = async \(\) => \{/);
   assert.match(source, /setHighlightedNoteIds\(highlightTrackerRef\.current\.next\(sortedTrees\)\)/);
-  assert.match(source, /setInterval\(\(\) => \{\s*void refreshAll\(\);\s*\}, 15_000\);/s);
+
+  const intervalSection = source.match(/const timer = setInterval\([\s\S]*?15_000\);/);
+  assert.ok(intervalSection, 'expected refresh interval callback block');
+  const refreshCalls = intervalSection[0].match(/void refreshAll\(\);/g) ?? [];
+  assert.equal(refreshCalls.length, 1, 'expected interval callback to call refreshAll exactly once');
+
   assert.match(source, /window\.addEventListener\('focus', onRefresh\)/);
 });
 

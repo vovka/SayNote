@@ -256,9 +256,7 @@ function NotesPageContent() {
     };
 
     void refreshAll();
-    const timer = setInterval(() => {
-      void refreshAll();
-    }, 15_000);
+    const timer = setInterval(() => void refreshAll(), 15_000);
     const onRefresh = () => {
       void refreshAll();
     };
