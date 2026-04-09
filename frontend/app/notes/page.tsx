@@ -34,6 +34,7 @@ import {
 
 type CategoryNode = NoteCategoryTreeNode;
 const RECORDING_STATUS_POLL_INTERVAL_MS = 1_000;
+const REFRESH_POLL_INTERVAL_MS = 15_000;
 
 function round(value: number): number {
   return Math.round(value * 100) / 100;
@@ -256,7 +257,7 @@ function NotesPageContent() {
     };
 
     void refreshAll();
-    const timer = setInterval(() => void refreshAll(), 15_000);
+    const timer = setInterval(() => void refreshAll(), REFRESH_POLL_INTERVAL_MS);
     const onRefresh = () => {
       void refreshAll();
     };
