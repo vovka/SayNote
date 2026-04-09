@@ -58,6 +58,7 @@ export function subscribeToRecordingLevel(listener: RecordingLevelListener) {
 }
 
 export async function startRecording() {
+  await cancelRecording();
   let stream: MediaStream | null = null;
 
   try {
