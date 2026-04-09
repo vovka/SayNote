@@ -1,6 +1,6 @@
 'use client';
 
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AuthGate } from '@/components/auth-gate';
 import { AuthControls } from '@/components/auth-controls';
 import { getCurrentUserId, getNotes, updateCategoryLock, type NoteCategoryTreeNode, type NoteSummary } from '@/lib/api/client';
@@ -42,11 +42,6 @@ function retriesFor(item: RecordingEntity, stage: FrontendLifecycleStage): numbe
   if (stage.startsWith('failed_upload')) return item.uploadRetryCount;
   if (stage.startsWith('failed_processing')) return item.processingRetryCount;
   return 0;
-}
-
-function latestRecordingFor(items: RecordingEntity[]): RecordingEntity | null {
-  if (!items.length) return null;
-  return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
 }
 
 function failureStatusMessage(item: RecordingEntity, stage: FrontendLifecycleStage): string {
@@ -192,9 +187,9 @@ function NotesPageContent() {
     let cancelled = false;
 
     const refreshLatestRecording = async () => {
-      const items = await db.recordings.where('userId').equals(userId).toArray();
+      const item = await db.recordings.where({ userId }).orderBy('createdAt').reverse().first();
       if (cancelled) return;
-      setLatestRecording(latestRecordingFor(items));
+      setLatestRecording(item ?? null);
     };
 
     void refreshLatestRecording();
@@ -271,15 +266,21 @@ function NotesPageContent() {
     }
   };
 
-  async function onTapRecord() {
+  const onTapRecord = useCallback(async () => {
+    if (!userId) {
+      setActionError('Missing authenticated user. Please sign in again.');
+      return;
+    }
+
     if (!recording) {
       try {
         await startRecording();
         setActionError(null);
         setStatusHint(labelForLifecycleStage('recorded_local'));
         setRecording(true);
-      } catch {
-        setActionError('Microphone access denied or unavailable');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Microphone access denied or unavailable';
+        setActionError(message);
       }
       return;
     }
@@ -287,11 +288,10 @@ function NotesPageContent() {
     const payload = await stopRecording();
     setRecording(false);
     if (!payload) return setActionError('No audio captured');
-    if (!userId) return setActionError('Missing authenticated user. Please sign in again.');
 
     setActionError(null);
     await queueRecording(userId, payload);
-  }
+  }, [recording, userId]);
 
   const isRecordingMode = visualState !== 'idle';
   const pulseAnimation = visualState === 'recording-speaking' ? 'recorder-pulse-fast' : 'recorder-pulse-slow';
