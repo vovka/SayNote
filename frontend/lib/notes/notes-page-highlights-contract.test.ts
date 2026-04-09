@@ -6,7 +6,25 @@ test('notes page applies temporary highlight class to newly detected notes', asy
   const source = await readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8');
 
   assert.match(source, /className=\{isHighlighted \? 'note-item--new' : undefined\}/);
+  assert.doesNotMatch(source, /style=\{isHighlighted \? \{ backgroundColor: '#fff7cc' \} : undefined\}/);
   assert.match(source, /setHighlightedNoteIds\(highlightTrackerRef\.current\.next\(sortedTrees\)\)/);
+});
+
+test('notes page defines dedicated note highlight animation styles', async () => {
+  const source = await readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /\.note-item--new\s*\{/);
+  assert.match(source, /animation:\s*note-item-new-fade 1600ms ease-out, note-item-new-pulse 900ms ease-out 2;/);
+  assert.match(source, /@keyframes note-item-new-fade/);
+  assert.match(source, /@keyframes note-item-new-pulse/);
+});
+
+test('notes page includes reduced-motion fallback for new-note highlight', async () => {
+  const source = await readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.note-item--new\s*\{[\s\S]*?animation:\s*none;/);
+  assert.match(source, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.note-item--new\s*\{[\s\S]*?background:\s*#fff7cc;/);
+  assert.match(source, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.note-item--new\s*\{[\s\S]*?box-shadow:\s*inset 0 0 0 2px #f59e0b;/);
 });
 
 test('notes page clears highlight tracker when page session ends', async () => {
