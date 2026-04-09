@@ -9,7 +9,7 @@ export type AudioLevelMeter = {
 const FRAME_SMOOTHING = 0.25;
 const FFT_SIZE = 1024;
 
-function toRmsLevel(buffer: Uint8Array) {
+export function toRmsLevel(buffer: Uint8Array) {
   const meanSquare = buffer.reduce((sum, value) => {
     const centered = (value - 128) / 128;
     return sum + centered * centered;

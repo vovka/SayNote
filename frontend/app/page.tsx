@@ -13,7 +13,11 @@ import { db, type RecordingEntity } from '@/lib/db/indexeddb';
 import { queueRecording, startSyncLoop } from '@/lib/sync/sync-manager';
 import { registerServiceWorker } from '@/lib/pwa/register-sw';
 import { getCurrentUserId } from '@/lib/api/client';
-import { getRecordingVisualState, getSmoothedLevel } from '@/lib/recording/recording-visual-state';
+import {
+  getRecordingVisualState,
+  getSmoothedLevel,
+  type RecordingVisualState
+} from '@/lib/recording/recording-visual-state';
 import { getRecordingAnimationVars, getRecordingButtonStyle } from '@/lib/recording/recording-button-style';
 import {
   isFrontendLifecycleStage,
@@ -68,6 +72,7 @@ function RecordPageContent() {
   const [level, setLevel] = useState(0);
   const targetLevel = useRef(0);
   const frameHandle = useRef(0);
+  const previousVisualState = useRef<RecordingVisualState>('idle');
 
   useEffect(() => {
     registerServiceWorker();
@@ -115,8 +120,12 @@ function RecordPageContent() {
   }, [userId]);
 
   const buttonText = useMemo(() => (recording ? 'Stop' : 'Record'), [recording]);
-  const visualState = getRecordingVisualState(recording, level);
+  const visualState = getRecordingVisualState(recording, level, previousVisualState.current);
   const buttonStyle = getRecordingButtonStyle(visualState, level);
+
+  useEffect(() => {
+    previousVisualState.current = visualState;
+  }, [visualState]);
 
   const status = useMemo(() => {
     if (actionError) return actionError;
