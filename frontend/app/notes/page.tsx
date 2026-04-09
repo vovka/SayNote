@@ -167,7 +167,7 @@ function NotesPageContent() {
             {syncItems.map((item) => (
               <li key={item.id} style={{ marginBottom: 10 }}>
                 <strong>{item.label}</strong>
-                <div><small>Stage: {labelForLifecycleStage(lifecycleStageFromRecording(item), item.uploadRetryCount || item.processingRetryCount)}</small></div>
+                <div><small>Stage: {labelForLifecycleStage(lifecycleStageFromRecording(item), item.failedStage === 'upload' ? item.uploadRetryCount : item.processingRetryCount)}</small></div>
                 <div><small>Recorded: {new Date(item.createdAt).toLocaleString()}</small></div>
                 <div><small>Updated: {new Date(item.statusUpdatedAt).toLocaleString()}</small></div>
                 {item.nextUploadRetryAt ? <div><small>Next upload retry: {new Date(item.nextUploadRetryAt).toLocaleString()}</small></div> : null}
