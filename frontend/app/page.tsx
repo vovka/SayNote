@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { AuthGate } from '@/components/auth-gate';
 import { AuthControls } from '@/components/auth-controls';
 import {
@@ -14,7 +14,7 @@ import { queueRecording, startSyncLoop } from '@/lib/sync/sync-manager';
 import { registerServiceWorker } from '@/lib/pwa/register-sw';
 import { getCurrentUserId } from '@/lib/api/client';
 import { getRecordingVisualState, getSmoothedLevel } from '@/lib/recording/recording-visual-state';
-import { getRecordingButtonStyle } from '@/lib/recording/recording-button-style';
+import { getRecordingAnimationVars, getRecordingButtonStyle } from '@/lib/recording/recording-button-style';
 import {
   isFrontendLifecycleStage,
   labelForLifecycleStage,
@@ -53,6 +53,10 @@ function statusFromRecording(item: RecordingEntity): string {
   if (stage.startsWith('failed_')) return failureStatusMessage(item, stage);
   if (stage === 'processed' || stage === 'note_visible') return 'Your note is ready';
   return labelForLifecycleStage(stage, retriesFor(item, stage));
+}
+
+function round(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function RecordPageContent() {
@@ -123,7 +127,16 @@ function RecordPageContent() {
   const isRecordingMode = visualState !== 'idle';
   const pulseAnimation = visualState === 'recording-speaking' ? 'recorder-pulse-fast' : 'recorder-pulse-slow';
   const ringAnimation = visualState === 'recording-speaking' ? 'recorder-ring-fast' : 'recorder-ring-slow';
-  const ringTransform = `scale(${1 + buttonStyle.ringSpread / 100})`;
+  const primaryRingScale = 1 + buttonStyle.ringSpread / 100;
+  const secondaryRingScale = 1 + buttonStyle.ringSpread / 70;
+  const primaryAnimationVars = getRecordingAnimationVars(visualState, buttonStyle, primaryRingScale);
+  const secondaryAnimationVars = getRecordingAnimationVars(visualState, buttonStyle, secondaryRingScale);
+  const buttonAnimationVars = {
+    '--pulse-saturation-base': buttonStyle.saturation,
+    '--pulse-saturation-peak': primaryAnimationVars.pulseSaturationPeak,
+    '--pulse-brightness-base': buttonStyle.brightness,
+    '--pulse-brightness-peak': primaryAnimationVars.pulseBrightnessPeak
+  } as CSSProperties;
 
   async function onTapRecord() {
     if (!recording) {
@@ -169,7 +182,8 @@ function RecordPageContent() {
             boxShadow: `0 0 ${buttonStyle.glowRadius}px rgba(231, 76, 60, ${buttonStyle.glowOpacity})`,
             filter: `saturate(${buttonStyle.saturation}) brightness(${buttonStyle.brightness})`,
             animation: isRecordingMode ? `${pulseAnimation} ${buttonStyle.pulseDurationMs}ms ease-in-out infinite` : undefined,
-            overflow: 'visible'
+            overflow: 'visible',
+            ...buttonAnimationVars
           }}
         >
           {isRecordingMode ? (
@@ -182,11 +196,15 @@ function RecordPageContent() {
                   borderRadius: '50%',
                   border: '2px solid rgba(255, 132, 118, 0.5)',
                   opacity: buttonStyle.ringOpacity,
-                  transform: ringTransform,
+                  transform: `scale(${primaryAnimationVars.ringScaleBase})`,
                   boxShadow: `0 0 ${buttonStyle.glowRadius}px rgba(231, 76, 60, ${buttonStyle.glowOpacity})`,
                   animation: `${ringAnimation} ${buttonStyle.pulseDurationMs}ms ease-in-out infinite`,
-                  pointerEvents: 'none'
-                }}
+                  pointerEvents: 'none',
+                  '--ring-scale-base': primaryAnimationVars.ringScaleBase,
+                  '--ring-scale-peak': primaryAnimationVars.ringScalePeak,
+                  '--ring-opacity-base': primaryAnimationVars.ringOpacityBase,
+                  '--ring-opacity-peak': primaryAnimationVars.ringOpacityPeak
+                } as CSSProperties}
               />
               <span
                 aria-hidden
@@ -196,11 +214,15 @@ function RecordPageContent() {
                   borderRadius: '50%',
                   border: '2px solid rgba(255, 176, 167, 0.45)',
                   opacity: buttonStyle.ringOpacity * 0.72,
-                  transform: `scale(${1 + buttonStyle.ringSpread / 70})`,
+                  transform: `scale(${secondaryAnimationVars.ringScaleBase})`,
                   boxShadow: `0 0 ${Math.round(buttonStyle.glowRadius * 0.8)}px rgba(231, 76, 60, ${buttonStyle.glowOpacity})`,
                   animation: `${ringAnimation} ${Math.round(buttonStyle.pulseDurationMs * 1.1)}ms ease-in-out infinite`,
-                  pointerEvents: 'none'
-                }}
+                  pointerEvents: 'none',
+                  '--ring-scale-base': secondaryAnimationVars.ringScaleBase,
+                  '--ring-scale-peak': secondaryAnimationVars.ringScalePeak,
+                  '--ring-opacity-base': round(buttonStyle.ringOpacity * 0.72),
+                  '--ring-opacity-peak': round(primaryAnimationVars.ringOpacityPeak * 0.78)
+                } as CSSProperties}
               />
             </>
           ) : null}
@@ -208,20 +230,20 @@ function RecordPageContent() {
         </button>
         <style jsx>{`
           @keyframes recorder-pulse-slow {
-            0%, 100% { filter: saturate(1.08) brightness(1.02); }
-            50% { filter: saturate(1.2) brightness(1.12); }
+            0%, 100% { filter: saturate(var(--pulse-saturation-base)) brightness(var(--pulse-brightness-base)); }
+            50% { filter: saturate(var(--pulse-saturation-peak)) brightness(var(--pulse-brightness-peak)); }
           }
           @keyframes recorder-pulse-fast {
-            0%, 100% { filter: saturate(1.2) brightness(1.08); }
-            50% { filter: saturate(1.45) brightness(1.22); }
+            0%, 100% { filter: saturate(var(--pulse-saturation-base)) brightness(var(--pulse-brightness-base)); }
+            50% { filter: saturate(var(--pulse-saturation-peak)) brightness(var(--pulse-brightness-peak)); }
           }
           @keyframes recorder-ring-slow {
-            0%, 100% { opacity: 0.34; transform: scale(1.06); }
-            50% { opacity: 0.52; transform: scale(1.18); }
+            0%, 100% { opacity: var(--ring-opacity-base); transform: scale(var(--ring-scale-base)); }
+            50% { opacity: var(--ring-opacity-peak); transform: scale(var(--ring-scale-peak)); }
           }
           @keyframes recorder-ring-fast {
-            0%, 100% { opacity: 0.42; transform: scale(1.1); }
-            50% { opacity: 0.72; transform: scale(1.34); }
+            0%, 100% { opacity: var(--ring-opacity-base); transform: scale(var(--ring-scale-base)); }
+            50% { opacity: var(--ring-opacity-peak); transform: scale(var(--ring-scale-peak)); }
           }
         `}</style>
         <p style={{ marginTop: 16, opacity: 0.8 }}>{status}</p>

@@ -11,6 +11,17 @@ type RecordingButtonStyle = {
   pulseDurationMs: number;
 };
 
+type RecordingAnimationVars = {
+  pulseSaturationBase: number;
+  pulseSaturationPeak: number;
+  pulseBrightnessBase: number;
+  pulseBrightnessPeak: number;
+  ringScaleBase: number;
+  ringScalePeak: number;
+  ringOpacityBase: number;
+  ringOpacityPeak: number;
+};
+
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 const norm = (level: number, floor: number, cap: number) => clamp((level - floor) / (cap - floor), 0, 1);
 
@@ -18,6 +29,15 @@ export function getRecordingButtonStyle(state: RecordingVisualState, level: numb
   if (state === 'idle') return idleStyle();
   if (state === 'recording-silent') return silentStyle();
   return speakingStyle(level);
+}
+
+export function getRecordingAnimationVars(
+  state: RecordingVisualState,
+  style: RecordingButtonStyle,
+  ringScale: number
+): RecordingAnimationVars {
+  if (state === 'recording-speaking') return speakingAnimationVars(style, ringScale);
+  return silentAnimationVars(style, ringScale);
 }
 
 function idleStyle(): RecordingButtonStyle {
@@ -44,4 +64,30 @@ function speakingStyle(level: number): RecordingButtonStyle {
 
 function round(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function silentAnimationVars(style: RecordingButtonStyle, ringScale: number): RecordingAnimationVars {
+  return {
+    pulseSaturationBase: style.saturation,
+    pulseSaturationPeak: round(style.saturation + 0.12),
+    pulseBrightnessBase: style.brightness,
+    pulseBrightnessPeak: round(style.brightness + 0.1),
+    ringScaleBase: round(ringScale),
+    ringScalePeak: round(ringScale + 0.12),
+    ringOpacityBase: round(style.ringOpacity),
+    ringOpacityPeak: round(clamp(style.ringOpacity + 0.18, 0, 1))
+  };
+}
+
+function speakingAnimationVars(style: RecordingButtonStyle, ringScale: number): RecordingAnimationVars {
+  return {
+    pulseSaturationBase: style.saturation,
+    pulseSaturationPeak: round(style.saturation + 0.25),
+    pulseBrightnessBase: style.brightness,
+    pulseBrightnessPeak: round(style.brightness + 0.16),
+    ringScaleBase: round(ringScale),
+    ringScalePeak: round(ringScale + 0.24),
+    ringOpacityBase: round(style.ringOpacity),
+    ringOpacityPeak: round(clamp(style.ringOpacity + 0.17, 0, 1))
+  };
 }
