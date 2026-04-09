@@ -32,12 +32,12 @@ test('note gets highlighted on first appearance after baseline refresh', () => {
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), []);
 });
 
-test('already-seen notes do not flash again when they return later', () => {
+test('already-highlighted notes do not flash again when they return later', () => {
   const tracker = new NoteHighlightTracker();
 
   tracker.next(tree(['a', 'b', 'c']));
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), ['d']);
-  assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'c']))), []);
+  assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'e']))), ['e']);
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), []);
 });
 
