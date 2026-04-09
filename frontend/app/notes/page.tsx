@@ -72,22 +72,25 @@ function CategoryTree({
 }) {
   const [isLockControlFocused, setLockControlFocused] = useState(false);
   const nextPath = [...path, node.name];
-  const lockControlStyle: CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    borderRadius: 999,
-    border: node.isLocked ? '1px solid #1f2937' : '1px solid #374151',
-    backgroundColor: node.isLocked ? '#1f2937' : '#ffffff',
-    color: node.isLocked ? '#f9fafb' : '#111827',
-    padding: '4px 10px',
-    fontWeight: 600,
-    fontSize: 12,
-    lineHeight: '16px',
-    cursor: 'pointer',
-    outline: '2px solid transparent',
-    outlineOffset: 2,
-    outlineColor: isLockControlFocused ? (node.isLocked ? '#93c5fd' : '#2563eb') : 'transparent'
-  };
+  const lockControlStyle: CSSProperties = useMemo(
+    () => ({
+      display: 'inline-flex',
+      alignItems: 'center',
+      borderRadius: 999,
+      border: node.isLocked ? '1px solid #1f2937' : '1px solid #374151',
+      backgroundColor: node.isLocked ? '#1f2937' : '#ffffff',
+      color: node.isLocked ? '#f9fafb' : '#111827',
+      padding: '4px 10px',
+      fontWeight: 600,
+      fontSize: 12,
+      lineHeight: '16px',
+      cursor: 'pointer',
+      outline: '2px solid transparent',
+      outlineOffset: 2,
+      outlineColor: isLockControlFocused ? (node.isLocked ? '#93c5fd' : '#2563eb') : 'transparent'
+    }),
+    [isLockControlFocused, node.isLocked]
+  );
 
   return (
     <section style={{ marginLeft: path.length * 16 }}>

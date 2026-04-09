@@ -27,7 +27,7 @@ test('notes page renders accessible lock state control and toggles lock state vi
   assert.match(notesPage, /node\.isLocked \? '🔐' : '🔓'/);
   assert.match(notesPage, /backgroundColor: node\.isLocked \? '#1f2937' : '#ffffff'/);
   assert.match(notesPage, /outline: '2px solid transparent'/);
-  assert.match(notesPage, /outlineColor: isLockControlFocused \?/);
+  assert.match(notesPage, /outlineColor: isLockControlFocused \? \(node\.isLocked \? '#93c5fd' : '#2563eb'\) : 'transparent'/);
   assert.match(notesPage, /updateCategoryLock\(/);
   assert.match(notesPage, /reconcileSyncItemsWithNotes/);
   assert.match(notesPage, /SYNC_JOB_COMPLETED_EVENT/);
