@@ -1,4 +1,5 @@
 import type { RecordingEntity } from '@/lib/db/indexeddb';
+import { labelForLifecycleStage, lifecycleStageFromRecording } from '../lifecycle/frontend-lifecycle.ts';
 
 export interface SyncStatusItem extends RecordingEntity {
   label: string;
@@ -32,14 +33,9 @@ export function reconcileSyncItemsWithNotes(syncItems: SyncStatusItem[], notes: 
 }
 
 export function renderSyncStatus(item: RecordingEntity): string {
-  if (item.status === 'recorded_local' || item.status === 'queued_upload') return 'Pending upload';
-  if (item.status === 'uploaded_waiting_processing') return 'Pending processing';
-  if (item.status === 'failed_retryable' && item.failedStage === 'upload') return `Upload failed (retry ${item.uploadRetryCount})`;
-  if (item.status === 'failed_retryable' && item.failedStage === 'processing') return `Processing failed (retry ${item.processingRetryCount})`;
-  if (item.status === 'failed_terminal' && item.failedStage === 'upload') return 'Upload failed permanently';
-  if (item.status === 'failed_terminal' && item.failedStage === 'processing') return 'Processing failed permanently';
-  if (item.status === 'uploading') return 'Uploading';
-  return item.status;
+  const stage = lifecycleStageFromRecording(item);
+  const retries = item.failedStage === 'upload' ? item.uploadRetryCount : item.processingRetryCount;
+  return labelForLifecycleStage(stage, retries);
 }
 
 function compareNewestFirst(a: RecordingEntity, b: RecordingEntity): number {

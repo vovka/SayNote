@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import type { FrontendLifecycleStage } from '@/lib/lifecycle/frontend-lifecycle';
 
 export interface RecordingEntity {
   id: string;
@@ -19,6 +20,7 @@ export interface RecordingEntity {
   statusUpdatedAt: string;
   uploadCompletedAt?: string;
   processedAt?: string;
+  lifecycleStage?: FrontendLifecycleStage;
 }
 
 class VoiceNotesDB extends Dexie {

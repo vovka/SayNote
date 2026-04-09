@@ -355,6 +355,7 @@ export async function getNotesTreeForUser(userId: string) {
     createdAt: string;
     sourceJobId?: string;
     clientRecordingId?: string;
+    lifecycleStage: 'note_visible';
   }>>();
   for (const note of notes) {
     const arr = notesByCategory.get(note.category_id as string) ?? [];
@@ -365,7 +366,8 @@ export async function getNotesTreeForUser(userId: string) {
       text: note.text as string,
       createdAt: note.created_at as string,
       sourceJobId: sourceJobId ?? undefined,
-      clientRecordingId: metadata.clientRecordingId ?? (sourceJobId ? jobIdToClientRecordingId.get(sourceJobId) : undefined)
+      clientRecordingId: metadata.clientRecordingId ?? (sourceJobId ? jobIdToClientRecordingId.get(sourceJobId) : undefined),
+      lifecycleStage: 'note_visible'
     });
     notesByCategory.set(note.category_id as string, arr);
   }

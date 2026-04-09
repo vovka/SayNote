@@ -48,7 +48,8 @@ export async function queueRecording(userId: string, payload: {
     uploadRetryCount: 0,
     processingRetryCount: 0,
     uploadIdempotencyKey: idempotencyKey,
-    statusUpdatedAt: new Date().toISOString()
+    statusUpdatedAt: new Date().toISOString(),
+    lifecycleStage: 'queued_upload'
   });
 
   if (navigator.onLine) {
@@ -136,7 +137,8 @@ export async function recoverStaleSyncState(userId: string, nowIso = new Date().
       failedStage: undefined,
       lastError: undefined,
       nextUploadRetryAt: undefined,
-      statusUpdatedAt: nowIso
+      statusUpdatedAt: nowIso,
+      lifecycleStage: 'queued_upload'
     });
   }
 
@@ -149,7 +151,8 @@ export async function recoverStaleSyncState(userId: string, nowIso = new Date().
   for (const item of pickStaleProcessingRecoveryQueue(processingRecoveryCandidates, nowIso, PROCESSING_STALE_MS)) {
     await db.recordings.update(item.id, {
       nextProcessingRetryAt: nowIso,
-      statusUpdatedAt: nowIso
+      statusUpdatedAt: nowIso,
+      lifecycleStage: 'transcribing'
     });
   }
 }
@@ -175,7 +178,7 @@ async function uploadOne(id: string) {
   const item = await db.recordings.get(id);
   if (!item || !item.audioBlob) return;
 
-  await db.recordings.update(id, { status: 'uploading', failedStage: undefined, lastError: undefined, statusUpdatedAt: new Date().toISOString() });
+  await db.recordings.update(id, { status: 'uploading', failedStage: undefined, lastError: undefined, statusUpdatedAt: new Date().toISOString(), lifecycleStage: 'uploading' });
 
   const form = new FormData();
   form.append('audio', item.audioBlob, `${item.id}.${audioFileExtension(item.mimeType)}`);
@@ -197,7 +200,8 @@ async function uploadOne(id: string) {
       nextProcessingRetryAt: new Date().toISOString(),
       failedStage: undefined,
       statusUpdatedAt: new Date().toISOString(),
-      uploadCompletedAt: new Date().toISOString()
+      uploadCompletedAt: new Date().toISOString(),
+      lifecycleStage: 'transcribing'
     });
   } catch (error) {
     const retryCount = (item.uploadRetryCount ?? 0) + 1;
@@ -208,7 +212,8 @@ async function uploadOne(id: string) {
       failedStage: 'upload',
       lastError: error instanceof Error ? error.message : 'Unknown error',
       nextUploadRetryAt: new Date(Date.now() + delay).toISOString(),
-      statusUpdatedAt: new Date().toISOString()
+      statusUpdatedAt: new Date().toISOString(),
+      lifecycleStage: retryCount >= UPLOAD_RETRY_POLICY.maxRetries ? 'failed_upload_terminal' : 'failed_upload_retryable'
     });
   }
 }
@@ -227,7 +232,8 @@ async function pollJobStatus(id: string) {
         statusUpdatedAt: now,
         nextProcessingRetryAt: undefined,
         failedStage: undefined,
-        lastError: undefined
+        lastError: undefined,
+        lifecycleStage: 'processed'
       });
       emitSyncJobCompleted({ recordingId: id, serverJobId: item.serverJobId });
       return;
@@ -239,7 +245,8 @@ async function pollJobStatus(id: string) {
         failedStage: 'processing',
         lastError: result.error_code ?? 'Processing failed terminally',
         statusUpdatedAt: now,
-        nextProcessingRetryAt: undefined
+        nextProcessingRetryAt: undefined,
+        lifecycleStage: 'failed_processing_terminal'
       });
       return;
     }
@@ -253,7 +260,8 @@ async function pollJobStatus(id: string) {
         failedStage: 'processing',
         lastError: result.error_code ?? 'Processing failed; will retry',
         nextProcessingRetryAt: new Date(Date.now() + delay).toISOString(),
-        statusUpdatedAt: now
+        statusUpdatedAt: now,
+        lifecycleStage: retryCount >= PROCESSING_RETRY_POLICY.maxRetries ? 'failed_processing_terminal' : 'failed_processing_retryable'
       });
       return;
     }
@@ -269,12 +277,13 @@ async function pollJobStatus(id: string) {
     const retryCount = (item.processingRetryCount ?? 0) + 1;
     const delay = computeBackoffMs(retryCount, PROCESSING_RETRY_POLICY.baseMs, PROCESSING_RETRY_POLICY.capMs);
     await db.recordings.update(id, {
-      status: retryCount >= PROCESSING_RETRY_POLICY.maxRetries ? 'failed_terminal' : item.status,
+      status: retryCount >= PROCESSING_RETRY_POLICY.maxRetries ? 'failed_terminal' : 'failed_retryable',
       processingRetryCount: retryCount,
       failedStage: 'processing',
       lastError: error instanceof Error ? error.message : 'Processing status lookup failed',
       nextProcessingRetryAt: new Date(Date.now() + delay).toISOString(),
-      statusUpdatedAt: new Date().toISOString()
+      statusUpdatedAt: new Date().toISOString(),
+      lifecycleStage: retryCount >= PROCESSING_RETRY_POLICY.maxRetries ? 'failed_processing_terminal' : 'failed_processing_retryable'
     });
   }
 }

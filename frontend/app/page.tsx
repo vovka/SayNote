@@ -13,6 +13,7 @@ import { queueRecording, startSyncLoop } from '@/lib/sync/sync-manager';
 import { registerServiceWorker } from '@/lib/pwa/register-sw';
 import { getCurrentUserId } from '@/lib/api/client';
 import { getRecordingVisualState, getSmoothedLevel } from '@/lib/recording/recording-visual-state';
+import { labelForLifecycleStage } from '@/lib/lifecycle/frontend-lifecycle';
 
 function RecordPageContent() {
   const [recording, setRecording] = useState(false);
@@ -60,7 +61,7 @@ function RecordPageContent() {
       try {
         await startRecording();
         setRecording(true);
-        setStatus('Recording');
+        setStatus(labelForLifecycleStage('recorded_local'));
       } catch {
         setStatus('Microphone access denied or unavailable');
       }
@@ -73,7 +74,7 @@ function RecordPageContent() {
     if (!userId) return setStatus('Missing authenticated user. Please sign in again.');
 
     await queueRecording(userId, payload);
-    setStatus(navigator.onLine ? 'Saved locally, uploading' : 'Saved locally, upload queued');
+    setStatus(labelForLifecycleStage(navigator.onLine ? 'uploading' : 'queued_upload'));
   }
 
   return (
