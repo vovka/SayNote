@@ -5,14 +5,25 @@ import { AuthGate } from '@/components/auth-gate';
 import { AuthControls } from '@/components/auth-controls';
 import { getNotes, updateCategoryLock, type NoteCategoryTreeNode, type NoteSummary } from '@/lib/api/client';
 import { db, type RecordingEntity } from '@/lib/db/indexeddb';
-import { SYNC_JOB_COMPLETED_EVENT } from '@/lib/sync/sync-manager';
+import { NoteHighlightTracker } from '@/lib/notes/new-note-highlights';
 import { shouldRefreshNotesForProcessedTransition } from '@/lib/notes/refresh-policy';
 import { buildSyncStatusItems, reconcileSyncItemsWithNotes, type SyncStatusItem } from '@/lib/notes/sync-visibility';
 import { sortCategoryTreeNewestFirst } from '@/lib/notes/tree-ordering';
+import { SYNC_JOB_COMPLETED_EVENT } from '@/lib/sync/sync-manager';
 
 type CategoryNode = NoteCategoryTreeNode;
 
-function CategoryTree({ node, path = [], onToggleLock }: { node: CategoryNode; path?: string[]; onToggleLock: (node: CategoryNode) => void }) {
+function CategoryTree({
+  node,
+  path = [],
+  onToggleLock,
+  highlightedNoteIds
+}: {
+  node: CategoryNode;
+  path?: string[];
+  onToggleLock: (node: CategoryNode) => void;
+  highlightedNoteIds: Set<string>;
+}) {
   const nextPath = [...path, node.name];
   return (
     <section style={{ marginLeft: path.length * 16 }}>
@@ -27,14 +38,30 @@ function CategoryTree({ node, path = [], onToggleLock }: { node: CategoryNode; p
         </button>
       </h3>
       <ul>
-        {node.notes.map((note) => (
-          <li key={note.id}>
-            <p>{note.text}</p>
-            <small>{new Date(note.createdAt).toLocaleString()} · {nextPath.join(' > ')}</small>
-          </li>
-        ))}
+        {node.notes.map((note) => {
+          const isHighlighted = highlightedNoteIds.has(note.id);
+
+          return (
+            <li
+              key={note.id}
+              className={isHighlighted ? 'note-item--new' : undefined}
+              style={isHighlighted ? { backgroundColor: '#fff7cc' } : undefined}
+            >
+              <p>{note.text}</p>
+              <small>{new Date(note.createdAt).toLocaleString()} · {nextPath.join(' > ')}</small>
+            </li>
+          );
+        })}
       </ul>
-      {node.children.map((child) => <CategoryTree key={child.id} node={child} path={nextPath} onToggleLock={onToggleLock} />)}
+      {node.children.map((child) => (
+        <CategoryTree
+          key={child.id}
+          node={child}
+          path={nextPath}
+          onToggleLock={onToggleLock}
+          highlightedNoteIds={highlightedNoteIds}
+        />
+      ))}
     </section>
   );
 }
@@ -67,6 +94,8 @@ function flattenNotes(nodes: CategoryNode[]): NoteSummary[] {
 function NotesPageContent() {
   const [trees, setTrees] = useState<CategoryNode[]>([]);
   const [syncItems, setSyncItems] = useState<SyncStatusItem[]>([]);
+  const [highlightedNoteIds, setHighlightedNoteIds] = useState<Set<string>>(new Set());
+  const highlightTrackerRef = useRef(new NoteHighlightTracker());
   const previousStatusesRef = useRef<Map<string, RecordingEntity['status']>>(new Map());
 
   useEffect(() => {
@@ -86,6 +115,7 @@ function NotesPageContent() {
         nextTrees = await getNotes();
       }
       const sortedTrees = sortCategoryTreeNewestFirst(nextTrees);
+      setHighlightedNoteIds(highlightTrackerRef.current.next(sortedTrees));
       setTrees(sortedTrees);
       setSyncItems(reconcileSyncItemsWithNotes(buildSyncStatusItems(items), flattenNotes(sortedTrees)));
     };
@@ -101,6 +131,7 @@ function NotesPageContent() {
     window.addEventListener(SYNC_JOB_COMPLETED_EVENT, onRefresh);
 
     return () => {
+      highlightTrackerRef.current.reset();
       clearInterval(timer);
       window.removeEventListener('focus', onRefresh);
       window.removeEventListener(SYNC_JOB_COMPLETED_EVENT, onRefresh);
@@ -142,7 +173,14 @@ function NotesPageContent() {
           </ul>
         )}
       </section>
-      {trees.map((node) => <CategoryTree key={node.id} node={node} onToggleLock={handleToggleLock} />)}
+      {trees.map((node) => (
+        <CategoryTree
+          key={node.id}
+          node={node}
+          onToggleLock={handleToggleLock}
+          highlightedNoteIds={highlightedNoteIds}
+        />
+      ))}
     </main>
   );
 }
