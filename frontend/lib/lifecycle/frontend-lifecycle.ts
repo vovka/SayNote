@@ -23,6 +23,8 @@ export function lifecycleStageFromRecording(item: RecordingEntity): FrontendLife
   if (item.status === 'failed_retryable' && item.failedStage === 'processing') return 'failed_processing_retryable';
   if (item.status === 'failed_terminal' && item.failedStage === 'processing') return 'failed_processing_terminal';
   if (item.status === 'uploaded_waiting_processing') return 'transcribing';
+  if (item.status === 'failed_retryable') return 'failed_processing_retryable';
+  if (item.status === 'failed_terminal') return 'failed_processing_terminal';
   return item.status;
 }
 
