@@ -55,7 +55,7 @@ function failureStatusMessage(item: RecordingEntity, stage: FrontendLifecycleSta
 function statusFromRecording(item: RecordingEntity): string {
   const stage = lifecycleStageFor(item);
   if (stage.startsWith('failed_')) return failureStatusMessage(item, stage);
-  if (stage === 'processed' || stage === "note_visible") return 'Your note is ready';
+  if (stage === 'processed' || stage === 'note_visible') return 'Your note is ready';
   return labelForLifecycleStage(stage, retriesFor(item, stage));
 }
 
