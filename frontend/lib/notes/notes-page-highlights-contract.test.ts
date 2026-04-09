@@ -31,4 +31,7 @@ test('notes page note rows render stable metadata without lifecycle labels', asy
   assert.doesNotMatch(source, /'note_visible'/);
   assert.doesNotMatch(source, /' · New'/);
   assert.doesNotMatch(source, /Note visible/);
+  assert.doesNotMatch(source, /nextPath\.join\(' > '\)/);
+  assert.match(source, /<small style=\{\{ color: '#6b7280' \}\}>/);
+  assert.match(source, /<p style=\{\{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 \}\}>/);
 });

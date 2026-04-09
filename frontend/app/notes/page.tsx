@@ -48,10 +48,10 @@ function CategoryTree({
               className={isHighlighted ? 'note-item--new' : undefined}
               style={isHighlighted ? { backgroundColor: '#fff7cc' } : undefined}
             >
-              <p>{note.text}</p>
-              <small>
-                {new Date(note.createdAt).toLocaleString()} · {nextPath.join(' > ')}
-              </small>
+              <p style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                <span>{note.text}</span>
+                <small style={{ color: '#6b7280' }}>{new Date(note.createdAt).toLocaleString()}</small>
+              </p>
             </li>
           );
         })}
