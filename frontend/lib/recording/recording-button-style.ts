@@ -1,4 +1,4 @@
-import type { RecordingVisualState } from './recording-visual-state.ts';
+import type { RecordingVisualState } from './recording-visual-state';
 
 type RecordingButtonStyle = {
   scale: number;
