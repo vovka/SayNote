@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { RecordingEntity } from '@/lib/db/indexeddb';
-import { buildSyncStatusItems } from './sync-visibility.ts';
+import { buildSyncStatusItems, reconcileSyncItemsWithNotes } from './sync-visibility.ts';
 
 function makeRecording(overrides: Partial<RecordingEntity>): RecordingEntity {
   return {
@@ -53,4 +53,19 @@ test('buildSyncStatusItems includes terminal failure', () => {
   ]);
 
   assert.equal(items[0]?.label, 'Processing failed permanently');
+});
+
+test('reconcileSyncItemsWithNotes hides pending processing once note exists', () => {
+  const syncItems = buildSyncStatusItems([
+    makeRecording({ id: 'rec-hide', status: 'uploaded_waiting_processing', serverJobId: 'job-hide' }),
+    makeRecording({ id: 'rec-keep', status: 'uploaded_waiting_processing', serverJobId: 'job-keep' }),
+    makeRecording({ id: 'rec-uploading', status: 'uploading' })
+  ]);
+
+  const visibleItems = reconcileSyncItemsWithNotes(syncItems, [{
+    sourceJobId: 'job-hide',
+    clientRecordingId: 'rec-hide'
+  }]);
+
+  assert.deepEqual(visibleItems.map((item) => item.id), ['rec-uploading', 'rec-keep']);
 });

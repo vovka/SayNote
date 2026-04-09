@@ -3,23 +3,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { AuthGate } from '@/components/auth-gate';
 import { AuthControls } from '@/components/auth-controls';
-import { getNotes, updateCategoryLock } from '@/lib/api/client';
+import { getNotes, updateCategoryLock, type NoteCategoryTreeNode, type NoteSummary } from '@/lib/api/client';
 import { db, type RecordingEntity } from '@/lib/db/indexeddb';
 import { NoteHighlightTracker } from '@/lib/notes/new-note-highlights';
 import { shouldRefreshNotesForProcessedTransition } from '@/lib/notes/refresh-policy';
-import { buildSyncStatusItems, type SyncStatusItem } from '@/lib/notes/sync-visibility';
+import { buildSyncStatusItems, reconcileSyncItemsWithNotes, type SyncStatusItem } from '@/lib/notes/sync-visibility';
 import { sortCategoryTreeNewestFirst } from '@/lib/notes/tree-ordering';
 import { SYNC_JOB_COMPLETED_EVENT } from '@/lib/sync/sync-manager';
 
-interface CategoryNode {
-  id: string;
-  name: string;
-  path: string;
-  depth: number;
-  isLocked: boolean;
-  notes: { id: string; text: string; createdAt: string; status?: string }[];
-  children: CategoryNode[];
-}
+type CategoryNode = NoteCategoryTreeNode;
 
 function CategoryTree({
   node,
@@ -87,6 +79,18 @@ function updateNodeLock(nodes: CategoryNode[], categoryId: string, isLocked: boo
   });
 }
 
+function flattenNotes(nodes: CategoryNode[]): NoteSummary[] {
+  const flattened: NoteSummary[] = [];
+  const stack = [...nodes];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) continue;
+    flattened.push(...current.notes);
+    stack.push(...current.children);
+  }
+  return flattened;
+}
+
 function NotesPageContent() {
   const [trees, setTrees] = useState<CategoryNode[]>([]);
   const [syncItems, setSyncItems] = useState<SyncStatusItem[]>([]);
@@ -111,31 +115,31 @@ function NotesPageContent() {
       const nextStatuses = new Map(items.map((item) => [item.id, item.status]));
       const hadNewProcessedItem = shouldRefreshNotesForProcessedTransition(previousStatusesRef.current, items);
       previousStatusesRef.current = nextStatuses;
-      setSyncItems(buildSyncStatusItems(items));
 
+      let nextTrees = await getNotes();
       if (hadNewProcessedItem) {
-        await refreshNotes();
+        nextTrees = await getNotes();
       }
-    };
-
-    const refreshAll = () => {
-      void refreshSyncItems();
-      void refreshNotes();
+      const sortedTrees = sortCategoryTreeNewestFirst(nextTrees);
+      setTrees(sortedTrees);
+      setSyncItems(reconcileSyncItemsWithNotes(buildSyncStatusItems(items), flattenNotes(sortedTrees)));
     };
 
     void refreshAll();
     const timer = setInterval(() => {
-      void refreshSyncItems();
-      void refreshNotes();
+      void refreshAll();
     }, 15_000);
-    window.addEventListener('focus', refreshAll);
-    window.addEventListener(SYNC_JOB_COMPLETED_EVENT, refreshAll);
+    const onRefresh = () => {
+      void refreshAll();
+    };
+    window.addEventListener('focus', onRefresh);
+    window.addEventListener(SYNC_JOB_COMPLETED_EVENT, onRefresh);
 
     return () => {
       highlightTrackerRef.current.reset();
       clearInterval(timer);
-      window.removeEventListener('focus', refreshAll);
-      window.removeEventListener(SYNC_JOB_COMPLETED_EVENT, refreshAll);
+      window.removeEventListener('focus', onRefresh);
+      window.removeEventListener(SYNC_JOB_COMPLETED_EVENT, onRefresh);
     };
   }, []);
 

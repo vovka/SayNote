@@ -4,6 +4,7 @@ export interface ProcessingJobRow {
   id: string;
   user_id: string;
   status: 'uploaded' | 'processing' | 'completed' | 'failed_retryable' | 'failed_terminal';
+  client_recording_id: string;
   client_created_at: string;
   audio_storage_key: string | null;
   retry_count: number;

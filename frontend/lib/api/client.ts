@@ -30,10 +30,29 @@ export async function getJob(jobId: string) {
   return response.json() as Promise<{ job_id: string; status: 'uploaded' | 'processing' | 'completed' | 'failed_retryable' | 'failed_terminal'; error_code: string | null }>;
 }
 
+export interface NoteSummary {
+  id: string;
+  text: string;
+  createdAt: string;
+  status?: string;
+  sourceJobId?: string;
+  clientRecordingId?: string;
+}
+
+export interface NoteCategoryTreeNode {
+  id: string;
+  name: string;
+  path: string;
+  depth: number;
+  isLocked: boolean;
+  notes: NoteSummary[];
+  children: NoteCategoryTreeNode[];
+}
+
 export async function getNotes() {
   const response = await authFetch('/api/notes', { cache: 'no-store' });
   if (!response.ok) return [];
-  return response.json();
+  return response.json() as Promise<NoteCategoryTreeNode[]>;
 }
 
 export async function getCategories(format: 'tree' | 'flat' = 'tree') {
