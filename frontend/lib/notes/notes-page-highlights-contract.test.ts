@@ -22,9 +22,9 @@ test('notes page defines dedicated note highlight animation styles', async () =>
 test('notes page includes reduced-motion fallback for new-note highlight', async () => {
   const source = await readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8');
 
-  assert.match(source, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(source, /\.note-item--new\s*\{[^}]*animation:\s*none;/s);
-  assert.match(source, /\.note-item--new\s*\{[^}]*background:\s*#fff7cc;/s);
+  assert.match(source, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.note-item--new\s*\{[\s\S]*?animation:\s*none;/);
+  assert.match(source, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.note-item--new\s*\{[\s\S]*?background:\s*#fff7cc;/);
+  assert.match(source, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.note-item--new\s*\{[\s\S]*?box-shadow:\s*inset 0 0 0 2px #f59e0b;/);
 });
 
 test('notes page clears highlight tracker when page session ends', async () => {
