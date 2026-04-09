@@ -99,13 +99,7 @@ function NotesPageContent() {
   const previousStatusesRef = useRef<Map<string, RecordingEntity['status']>>(new Map());
 
   useEffect(() => {
-    const refreshNotes = async () => {
-      const nextTrees = sortCategoryTreeNewestFirst(await getNotes());
-      setHighlightedNoteIds(highlightTrackerRef.current.next(nextTrees));
-      setTrees(nextTrees);
-    };
-
-    const refreshSyncItems = async () => {
+    const refreshAll = async () => {
       const items = await db.recordings
         .orderBy('createdAt')
         .reverse()
@@ -121,6 +115,7 @@ function NotesPageContent() {
         nextTrees = await getNotes();
       }
       const sortedTrees = sortCategoryTreeNewestFirst(nextTrees);
+      setHighlightedNoteIds(highlightTrackerRef.current.next(sortedTrees));
       setTrees(sortedTrees);
       setSyncItems(reconcileSyncItemsWithNotes(buildSyncStatusItems(items), flattenNotes(sortedTrees)));
     };
