@@ -10,7 +10,7 @@ import { shouldRefreshNotesForProcessedTransition } from '@/lib/notes/refresh-po
 import { buildSyncStatusItems, reconcileSyncItemsWithNotes, type SyncStatusItem } from '@/lib/notes/sync-visibility';
 import { sortCategoryTreeNewestFirst } from '@/lib/notes/tree-ordering';
 import { SYNC_JOB_COMPLETED_EVENT } from '@/lib/sync/sync-manager';
-import { isFrontendLifecycleStage, labelForLifecycleStage, lifecycleStageFromRecording } from '@/lib/lifecycle/frontend-lifecycle';
+import { labelForLifecycleStage, lifecycleStageFromRecording } from '@/lib/lifecycle/frontend-lifecycle';
 
 type CategoryNode = NoteCategoryTreeNode;
 
@@ -48,13 +48,10 @@ function CategoryTree({
               className={isHighlighted ? 'note-item--new' : undefined}
               style={isHighlighted ? { backgroundColor: '#fff7cc' } : undefined}
             >
-              <p>{note.text}</p>
-              <small>
-                {new Date(note.createdAt).toLocaleString()} · {nextPath.join(' > ')}
-                {' · '}
-                <strong>{labelForLifecycleStage(isFrontendLifecycleStage(note.lifecycleStage) ? note.lifecycleStage : 'note_visible')}</strong>
-                {isHighlighted ? ' · New' : ''}
-              </small>
+              <p style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                <span>{note.text}</span>
+                <small style={{ color: '#6b7280' }}>{new Date(note.createdAt).toLocaleString()}</small>
+              </p>
             </li>
           );
         })}

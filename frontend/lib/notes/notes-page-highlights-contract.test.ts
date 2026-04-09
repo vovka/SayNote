@@ -23,3 +23,15 @@ test('notes page refreshAll helper keeps highlighting and refresh wiring', async
   assert.match(source, /setInterval\(\(\) => \{\s*void refreshAll\(\);\s*\}, 15_000\);/s);
   assert.match(source, /window\.addEventListener\('focus', onRefresh\)/);
 });
+
+test('notes page note rows render stable metadata without lifecycle labels', async () => {
+  const source = await readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(source, /labelForLifecycleStage\(isFrontendLifecycleStage\(note\.lifecycleStage\)/);
+  assert.doesNotMatch(source, /'note_visible'/);
+  assert.doesNotMatch(source, /' · New'/);
+  assert.doesNotMatch(source, /Note visible/);
+  assert.doesNotMatch(source, /nextPath\.join\(' > '\)/);
+  assert.match(source, /<small style=\{\{ color: '#6b7280' \}\}>/);
+  assert.match(source, /<p style=\{\{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 \}\}>/);
+});
