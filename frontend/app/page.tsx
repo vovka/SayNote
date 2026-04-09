@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { AuthGate } from '@/components/auth-gate';
 import { AuthControls } from '@/components/auth-controls';
 import {
@@ -14,6 +14,7 @@ import { queueRecording, startSyncLoop } from '@/lib/sync/sync-manager';
 import { registerServiceWorker } from '@/lib/pwa/register-sw';
 import { getCurrentUserId } from '@/lib/api/client';
 import { getRecordingVisualState, getSmoothedLevel } from '@/lib/recording/recording-visual-state';
+import { getRecordingAnimationVars, getRecordingButtonStyle } from '@/lib/recording/recording-button-style';
 import {
   isFrontendLifecycleStage,
   labelForLifecycleStage,
@@ -52,6 +53,10 @@ function statusFromRecording(item: RecordingEntity): string {
   if (stage.startsWith('failed_')) return failureStatusMessage(item, stage);
   if (stage === 'processed' || stage === 'note_visible') return 'Your note is ready';
   return labelForLifecycleStage(stage, retriesFor(item, stage));
+}
+
+function round(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function RecordPageContent() {
@@ -111,6 +116,7 @@ function RecordPageContent() {
 
   const buttonText = useMemo(() => (recording ? 'Stop' : 'Record'), [recording]);
   const visualState = getRecordingVisualState(recording, level);
+  const buttonStyle = getRecordingButtonStyle(visualState, level);
 
   const status = useMemo(() => {
     if (actionError) return actionError;
@@ -118,9 +124,19 @@ function RecordPageContent() {
     if (latestRecording) return statusFromRecording(latestRecording);
     return statusHint;
   }, [actionError, latestRecording, recording, statusHint]);
-
-  const scale = visualState === 'recording-speaking' ? 1 + Math.min(level, 0.5) * 0.25 : 1;
-  const glow = visualState === 'recording-speaking' ? Math.round(level * 50) : 8;
+  const isRecordingMode = visualState !== 'idle';
+  const pulseAnimation = visualState === 'recording-speaking' ? 'recorder-pulse-fast' : 'recorder-pulse-slow';
+  const ringAnimation = visualState === 'recording-speaking' ? 'recorder-ring-fast' : 'recorder-ring-slow';
+  const primaryRingScale = 1 + buttonStyle.ringSpread / 100;
+  const secondaryRingScale = 1 + buttonStyle.ringSpread / 70;
+  const primaryAnimationVars = getRecordingAnimationVars(visualState, buttonStyle, primaryRingScale);
+  const secondaryAnimationVars = getRecordingAnimationVars(visualState, buttonStyle, secondaryRingScale);
+  const buttonAnimationVars = {
+    '--pulse-saturation-base': buttonStyle.saturation,
+    '--pulse-saturation-peak': primaryAnimationVars.pulseSaturationPeak,
+    '--pulse-brightness-base': buttonStyle.brightness,
+    '--pulse-brightness-peak': primaryAnimationVars.pulseBrightnessPeak
+  } as CSSProperties;
 
   async function onTapRecord() {
     if (!recording) {
@@ -152,6 +168,7 @@ function RecordPageContent() {
           aria-label={`Recorder (${visualState})`}
           onClick={onTapRecord}
           style={{
+            position: 'relative',
             width: 180,
             height: 180,
             borderRadius: '50%',
@@ -159,14 +176,76 @@ function RecordPageContent() {
             color: '#fff',
             fontSize: 24,
             cursor: 'pointer',
-            transform: `scale(${scale})`,
+            transform: `scale(${buttonStyle.scale})`,
             transition: 'background 120ms ease, transform 80ms linear, box-shadow 120ms ease',
             background: recording ? '#e74c3c' : '#111',
-            boxShadow: `0 0 ${glow}px rgba(231, 76, 60, 0.65)`
+            boxShadow: `0 0 ${buttonStyle.glowRadius}px rgba(231, 76, 60, ${buttonStyle.glowOpacity})`,
+            filter: `saturate(${buttonStyle.saturation}) brightness(${buttonStyle.brightness})`,
+            animation: isRecordingMode ? `${pulseAnimation} ${buttonStyle.pulseDurationMs}ms ease-in-out infinite` : undefined,
+            overflow: 'visible',
+            ...buttonAnimationVars
           }}
         >
+          {isRecordingMode ? (
+            <>
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: '50%',
+                  border: '2px solid rgba(255, 132, 118, 0.5)',
+                  opacity: buttonStyle.ringOpacity,
+                  transform: `scale(${primaryAnimationVars.ringScaleBase})`,
+                  boxShadow: `0 0 ${buttonStyle.glowRadius}px rgba(231, 76, 60, ${buttonStyle.glowOpacity})`,
+                  animation: `${ringAnimation} ${buttonStyle.pulseDurationMs}ms ease-in-out infinite`,
+                  pointerEvents: 'none',
+                  '--ring-scale-base': primaryAnimationVars.ringScaleBase,
+                  '--ring-scale-peak': primaryAnimationVars.ringScalePeak,
+                  '--ring-opacity-base': primaryAnimationVars.ringOpacityBase,
+                  '--ring-opacity-peak': primaryAnimationVars.ringOpacityPeak
+                } as CSSProperties}
+              />
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: '50%',
+                  border: '2px solid rgba(255, 176, 167, 0.45)',
+                  opacity: buttonStyle.ringOpacity * 0.72,
+                  transform: `scale(${secondaryAnimationVars.ringScaleBase})`,
+                  boxShadow: `0 0 ${Math.round(buttonStyle.glowRadius * 0.8)}px rgba(231, 76, 60, ${buttonStyle.glowOpacity})`,
+                  animation: `${ringAnimation} ${Math.round(buttonStyle.pulseDurationMs * 1.1)}ms ease-in-out infinite`,
+                  pointerEvents: 'none',
+                  '--ring-scale-base': secondaryAnimationVars.ringScaleBase,
+                  '--ring-scale-peak': secondaryAnimationVars.ringScalePeak,
+                  '--ring-opacity-base': round(buttonStyle.ringOpacity * 0.72),
+                  '--ring-opacity-peak': round(primaryAnimationVars.ringOpacityPeak * 0.78)
+                } as CSSProperties}
+              />
+            </>
+          ) : null}
           {buttonText}
         </button>
+        <style jsx>{`
+          @keyframes recorder-pulse-slow {
+            0%, 100% { filter: saturate(var(--pulse-saturation-base)) brightness(var(--pulse-brightness-base)); }
+            50% { filter: saturate(var(--pulse-saturation-peak)) brightness(var(--pulse-brightness-peak)); }
+          }
+          @keyframes recorder-pulse-fast {
+            0%, 100% { filter: saturate(var(--pulse-saturation-base)) brightness(var(--pulse-brightness-base)); }
+            50% { filter: saturate(var(--pulse-saturation-peak)) brightness(var(--pulse-brightness-peak)); }
+          }
+          @keyframes recorder-ring-slow {
+            0%, 100% { opacity: var(--ring-opacity-base); transform: scale(var(--ring-scale-base)); }
+            50% { opacity: var(--ring-opacity-peak); transform: scale(var(--ring-scale-peak)); }
+          }
+          @keyframes recorder-ring-fast {
+            0%, 100% { opacity: var(--ring-opacity-base); transform: scale(var(--ring-scale-base)); }
+            50% { opacity: var(--ring-opacity-peak); transform: scale(var(--ring-scale-peak)); }
+          }
+        `}</style>
         <p style={{ marginTop: 16, opacity: 0.8 }}>{status}</p>
         <p>
           <a href="/notes">View notes</a> · <a href="/settings">Settings</a>
