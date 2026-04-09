@@ -15,15 +15,19 @@ test('category APIs expose lock state and patch endpoint uses isLocked payload',
   assert.match(notesRoute, /getNotesTreeForUser/);
 });
 
-test('notes page renders lock icon and toggles lock state via api client', async () => {
+test('notes page renders accessible lock state control and toggles lock state via api client', async () => {
   const [notesPage, apiClient, supabaseServer] = await Promise.all([
     readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8'),
     readFile(new URL('./client.ts', import.meta.url), 'utf8'),
     readFile(new URL('./supabase-server.ts', import.meta.url), 'utf8')
   ]);
 
-  assert.match(notesPage, /🔒/);
-  assert.match(notesPage, /🔓/);
+  assert.match(notesPage, /aria-label=\{node\.isLocked \? `Unlock category \$\{node\.name\}` : `Lock category \$\{node\.name\}`}/);
+  assert.match(notesPage, /title=\{node\.isLocked \? `Locked category: \$\{node\.name\}` : `Unlocked category: \$\{node\.name\}`}/);
+  assert.match(notesPage, /node\.isLocked \? '🔐' : '🔓'/);
+  assert.match(notesPage, /backgroundColor: node\.isLocked \? '#1f2937' : '#ffffff'/);
+  assert.match(notesPage, /outline: '2px solid transparent'/);
+  assert.match(notesPage, /outlineColor: isLockControlFocused \? \(node\.isLocked \? '#93c5fd' : '#2563eb'\) : 'transparent'/);
   assert.match(notesPage, /updateCategoryLock\(/);
   assert.match(notesPage, /reconcileSyncItemsWithNotes/);
   assert.match(notesPage, /SYNC_JOB_COMPLETED_EVENT/);

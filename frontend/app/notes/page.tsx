@@ -76,7 +76,28 @@ function CategoryTree({
   onToggleLock: (node: CategoryNode) => void;
   highlightedNoteIds: Set<string>;
 }) {
+  const [isLockControlFocused, setLockControlFocused] = useState(false);
   const nextPath = [...path, node.name];
+  const lockControlStyle: CSSProperties = useMemo(
+    () => ({
+      display: 'inline-flex',
+      alignItems: 'center',
+      borderRadius: 999,
+      border: node.isLocked ? '1px solid #1f2937' : '1px solid #374151',
+      backgroundColor: node.isLocked ? '#1f2937' : '#ffffff',
+      color: node.isLocked ? '#f9fafb' : '#111827',
+      padding: '4px 10px',
+      fontWeight: 600,
+      fontSize: 12,
+      lineHeight: '16px',
+      cursor: 'pointer',
+      outline: '2px solid transparent',
+      outlineOffset: 2,
+      outlineColor: isLockControlFocused ? (node.isLocked ? '#93c5fd' : '#2563eb') : 'transparent'
+    }),
+    [isLockControlFocused, node.isLocked]
+  );
+
   return (
     <section style={{ marginLeft: path.length * 16 }}>
       <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -84,9 +105,13 @@ function CategoryTree({
         <button
           type="button"
           aria-label={node.isLocked ? `Unlock category ${node.name}` : `Lock category ${node.name}`}
+          title={node.isLocked ? `Locked category: ${node.name}` : `Unlocked category: ${node.name}`}
+          style={lockControlStyle}
+          onFocus={() => setLockControlFocused(true)}
+          onBlur={() => setLockControlFocused(false)}
           onClick={() => onToggleLock(node)}
         >
-          {node.isLocked ? '🔒' : '🔓'}
+          <span aria-hidden="true">{node.isLocked ? '🔐' : '🔓'}</span>
         </button>
       </h3>
       <ul>
