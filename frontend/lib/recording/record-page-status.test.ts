@@ -12,9 +12,8 @@ test('notes page wires recording lifecycle polling and sync loop', async () => {
   assert.match(source, /setStatusHint\(labelForLifecycleStage\('recorded_local'\)\)/);
 });
 
-test('home page points users to recorder in notes view', async () => {
+test('home page renders the same notes-plus-recorder experience', async () => {
   const source = await readFile(new URL('../../app/page.tsx', import.meta.url), 'utf8');
 
-  assert.match(source, /href="\/notes"/);
-  assert.match(source, /Recorder moved to Notes/);
+  assert.match(source, /export \{ default \} from '\.\/notes\/page';/);
 });
