@@ -187,7 +187,8 @@ function NotesPageContent() {
     let cancelled = false;
 
     const refreshLatestRecording = async () => {
-      const item = await db.recordings.where({ userId }).orderBy('createdAt').reverse().first();
+      const userRecordings = await db.recordings.where('userId').equals(userId).sortBy('createdAt');
+      const item = userRecordings.at(-1);
       if (cancelled) return;
       setLatestRecording(item ?? null);
     };
