@@ -1,5 +1,5 @@
 import type { RecordingEntity } from '@/lib/db/indexeddb';
-import { labelForLifecycleStage, lifecycleStageFromRecording } from '@/lib/lifecycle/frontend-lifecycle';
+import { labelForLifecycleStage, lifecycleStageFromRecording } from '../lifecycle/frontend-lifecycle.ts';
 
 export interface SyncStatusItem extends RecordingEntity {
   label: string;

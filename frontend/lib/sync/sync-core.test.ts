@@ -6,7 +6,7 @@ import {
   pickStaleUploadRecoveryQueue,
   pickUploadQueue
 } from './sync-core.ts';
-import { FRONTEND_LIFECYCLE_ORDER } from '@/lib/lifecycle/frontend-lifecycle';
+import { FRONTEND_LIFECYCLE_ORDER } from '../lifecycle/frontend-lifecycle.ts';
 
 test('pickUploadQueue supports offline->reconnect upload convergence selection', () => {
   const now = '2026-04-07T12:00:00.000Z';

@@ -7,7 +7,7 @@ test('sync manager recovers stale uploading items and requeues uploads', async (
 
   assert.match(source, /db\.recordings\s+\.where\('userId'\)\s+\.equals\(userId\)\s+\.and\(\(item\) => item\.status === 'uploading'\)\s+\.toArray\(\)/);
   assert.match(source, /pickStaleUploadRecoveryQueue\(uploadRecoveryCandidates, nowIso, UPLOADING_STALE_MS\)/);
-  assert.match(source, /await db\.recordings\.update\(item\.id, \{\s*status: 'queued_upload',[\s\S]*statusUpdatedAt: nowIso\s*\}\);/);
+  assert.match(source, /await db\.recordings\.update\(item\.id, \{\s*status: 'queued_upload',[\s\S]*statusUpdatedAt: nowIso,[\s\S]*\}\);/);
   assert.match(source, /lifecycleStage: 'queued_upload'/);
 });
 
