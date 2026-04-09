@@ -91,7 +91,6 @@ function CategoryTree({
             <li
               key={note.id}
               className={isHighlighted ? 'note-item--new' : undefined}
-              style={isHighlighted ? { backgroundColor: '#fff7cc' } : undefined}
             >
               <p style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
                 <span>{note.text}</span>
@@ -432,6 +431,26 @@ function NotesPageContent() {
       </section>
 
       <style jsx>{`
+
+        .note-item--new {
+          background: #fff7cc;
+          animation: note-item-new-fade 1600ms ease-out, note-item-new-pulse 900ms ease-out 2;
+        }
+        @keyframes note-item-new-fade {
+          0% { background: #ffe680; }
+          100% { background: #fff7cc; }
+        }
+        @keyframes note-item-new-pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+          50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.22); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .note-item--new {
+            animation: none;
+            background: #fff7cc;
+            box-shadow: inset 0 0 0 2px #f59e0b;
+          }
+        }
         @keyframes recorder-pulse-slow {
           0%, 100% { filter: saturate(var(--pulse-saturation-base)) brightness(var(--pulse-brightness-base)); }
           50% { filter: saturate(var(--pulse-saturation-peak)) brightness(var(--pulse-brightness-peak)); }
