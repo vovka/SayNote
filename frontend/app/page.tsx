@@ -21,6 +21,8 @@ import {
   type FrontendLifecycleStage
 } from '@/lib/lifecycle/frontend-lifecycle';
 
+const RECORDING_STATUS_POLL_INTERVAL_MS = 1_000;
+
 function lifecycleStageFor(item: RecordingEntity): FrontendLifecycleStage {
   const stage = item.lifecycleStage;
   return isFrontendLifecycleStage(stage) ? stage : lifecycleStageFromRecording(item);
@@ -100,7 +102,7 @@ function RecordPageContent() {
     };
 
     void refreshLatestRecording();
-    const interval = setInterval(() => void refreshLatestRecording(), 1_000);
+    const interval = setInterval(() => void refreshLatestRecording(), RECORDING_STATUS_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
