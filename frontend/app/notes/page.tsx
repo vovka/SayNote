@@ -10,7 +10,7 @@ import { shouldRefreshNotesForProcessedTransition } from '@/lib/notes/refresh-po
 import { buildSyncStatusItems, reconcileSyncItemsWithNotes, type SyncStatusItem } from '@/lib/notes/sync-visibility';
 import { sortCategoryTreeNewestFirst } from '@/lib/notes/tree-ordering';
 import { SYNC_JOB_COMPLETED_EVENT } from '@/lib/sync/sync-manager';
-import { isFrontendLifecycleStage, labelForLifecycleStage, lifecycleStageFromRecording } from '@/lib/lifecycle/frontend-lifecycle';
+import { labelForLifecycleStage, lifecycleStageFromRecording } from '@/lib/lifecycle/frontend-lifecycle';
 
 type CategoryNode = NoteCategoryTreeNode;
 
@@ -51,9 +51,6 @@ function CategoryTree({
               <p>{note.text}</p>
               <small>
                 {new Date(note.createdAt).toLocaleString()} · {nextPath.join(' > ')}
-                {' · '}
-                <strong>{labelForLifecycleStage(isFrontendLifecycleStage(note.lifecycleStage) ? note.lifecycleStage : 'note_visible')}</strong>
-                {isHighlighted ? ' · New' : ''}
               </small>
             </li>
           );
