@@ -250,6 +250,7 @@ function NotesPageContent() {
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [dismissedSyncSuccessKeys, setDismissedSyncSuccessKeys] = useState<Set<string>>(new Set());
+  const successDismissTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     registerServiceWorker();
@@ -352,16 +353,35 @@ function NotesPageContent() {
 
 
   useEffect(() => {
-    const timers = syncItems
-      .filter((item) => item.transientStatus === 'note_added_success')
-      .filter((item) => !dismissedSyncSuccessKeys.has(syncItemSuccessKey(item)))
-      .map((item) => setTimeout(() => {
-        const successKey = syncItemSuccessKey(item);
-        setDismissedSyncSuccessKeys((previous) => new Set(previous).add(successKey));
-      }, NOTE_ADDED_SUCCESS_TIMEOUT_MS));
+    const activeSuccessKeys = new Set(
+      syncItems
+        .filter((item) => item.transientStatus === 'note_added_success')
+        .map((item) => syncItemSuccessKey(item))
+    );
 
-    return () => timers.forEach((timer) => clearTimeout(timer));
+    syncItems
+      .filter((item) => item.transientStatus === 'note_added_success')
+      .forEach((item) => {
+        const successKey = syncItemSuccessKey(item);
+        if (dismissedSyncSuccessKeys.has(successKey) || successDismissTimersRef.current.has(successKey)) return;
+        const timer = setTimeout(() => {
+          setDismissedSyncSuccessKeys((previous) => new Set(previous).add(successKey));
+          successDismissTimersRef.current.delete(successKey);
+        }, NOTE_ADDED_SUCCESS_TIMEOUT_MS);
+        successDismissTimersRef.current.set(successKey, timer);
+      });
+
+    successDismissTimersRef.current.forEach((timer, successKey) => {
+      if (activeSuccessKeys.has(successKey) && !dismissedSyncSuccessKeys.has(successKey)) return;
+      clearTimeout(timer);
+      successDismissTimersRef.current.delete(successKey);
+    });
   }, [dismissedSyncSuccessKeys, syncItems]);
+
+  useEffect(() => () => {
+    successDismissTimersRef.current.forEach((timer) => clearTimeout(timer));
+    successDismissTimersRef.current.clear();
+  }, []);
 
   const visibleSyncItems = useMemo(
     () => syncItems.filter((item) => (

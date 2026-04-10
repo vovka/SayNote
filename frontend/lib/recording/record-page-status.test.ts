@@ -21,6 +21,16 @@ test('notes page keeps lifecycle status messaging for terminal and ready states'
   assert.match(source, /if \(stage\.startsWith\('failed_'\)\) return failureStatusMessage\(item, stage\)/);
 });
 
+
+test('notes page keeps one timeout per success item without timer reset cascades', async () => {
+  const source = await readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /const successDismissTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>\(new Map\(\)\);/);
+  assert.match(source, /if \(dismissedSyncSuccessKeys\.has\(successKey\) \|\| successDismissTimersRef\.current\.has\(successKey\)\) return;/);
+  assert.match(source, /successDismissTimersRef\.current\.set\(successKey, timer\);/);
+  assert.match(source, /successDismissTimersRef\.current\.delete\(successKey\);/);
+});
+
 test('notes page validates auth before recording and reports specific start errors', async () => {
   const source = await readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8');
 
