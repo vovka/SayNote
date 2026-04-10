@@ -69,7 +69,7 @@ test('buildSyncStatusItems maps upload failure labels with canonical terminology
   assert.equal(items.find((item) => item.id === 'terminal')?.label, 'Upload failed permanently');
 });
 
-test('reconcileSyncItemsWithNotes hides pending processing once note exists', () => {
+test('reconcileSyncItemsWithNotes replaces correlated pending processing with note-added success', () => {
   const syncItems = buildSyncStatusItems([
     makeRecording({ id: 'rec-hide', status: 'uploaded_waiting_processing', serverJobId: 'job-hide' }),
     makeRecording({ id: 'rec-keep', status: 'uploaded_waiting_processing', serverJobId: 'job-keep' }),
@@ -81,7 +81,10 @@ test('reconcileSyncItemsWithNotes hides pending processing once note exists', ()
     clientRecordingId: 'rec-hide'
   }]);
 
-  assert.deepEqual(visibleItems.map((item) => item.id), ['rec-uploading', 'rec-keep']);
+  assert.deepEqual(visibleItems.map((item) => item.id), ['rec-uploading', 'rec-keep', 'rec-hide']);
+  const successItem = visibleItems.find((item) => item.id === 'rec-hide');
+  assert.equal(successItem?.transientStatus, 'note_added_success');
+  assert.equal(successItem?.label, 'Note added');
 });
 
 
