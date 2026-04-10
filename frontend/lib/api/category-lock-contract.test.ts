@@ -3,16 +3,24 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 test('category APIs expose lock state and patch endpoint uses isLocked payload', async () => {
-  const [categoriesRoute, categoryPatchRoute, notesRoute] = await Promise.all([
+  const [categoriesRoute, categoryRoute, notesRoute, noteRoute] = await Promise.all([
     readFile(new URL('../../app/api/categories/route.ts', import.meta.url), 'utf8'),
     readFile(new URL('../../app/api/categories/[id]/route.ts', import.meta.url), 'utf8'),
-    readFile(new URL('../../app/api/notes/route.ts', import.meta.url), 'utf8')
+    readFile(new URL('../../app/api/notes/route.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../../app/api/notes/[id]/route.ts', import.meta.url), 'utf8')
   ]);
 
   assert.match(categoriesRoute, /isLocked/);
-  assert.match(categoryPatchRoute, /export async function PATCH/);
-  assert.match(categoryPatchRoute, /isLocked/);
+  assert.match(categoryRoute, /export async function PATCH/);
+  assert.match(categoryRoute, /export async function DELETE/);
+  assert.match(categoryRoute, /isLocked/);
+  assert.match(categoryRoute, /name/);
+  assert.match(categoryRoute, /patchCategoryForUser/);
+  assert.doesNotMatch(categoryRoute, /if \(typeof body\.isLocked === 'boolean'\) \{[\s\S]*return NextResponse\.json\(updated\);\s*}\s*\n\s*if \(typeof body\.name === 'string'\)/);
   assert.match(notesRoute, /getNotesTreeForUser/);
+  assert.match(noteRoute, /export async function PATCH/);
+  assert.match(noteRoute, /export async function DELETE/);
+  assert.match(noteRoute, /text/);
 });
 
 test('notes page renders accessible lock state control and toggles lock state via api client', async () => {
@@ -29,12 +37,27 @@ test('notes page renders accessible lock state control and toggles lock state vi
   assert.match(notesPage, /outline: '2px solid transparent'/);
   assert.match(notesPage, /outlineColor: isLockControlFocused \? \(node\.isLocked \? '#93c5fd' : '#2563eb'\) : 'transparent'/);
   assert.match(notesPage, /updateCategoryLock\(/);
+  assert.match(notesPage, /renameCategory\(/);
+  assert.match(notesPage, /deleteCategory\(/);
+  assert.match(notesPage, /updateNote\(/);
+  assert.match(notesPage, /deleteNote\(/);
   assert.match(notesPage, /reconcileSyncItemsWithNotes/);
   assert.match(notesPage, /SYNC_JOB_COMPLETED_EVENT/);
   assert.match(apiClient, /export async function updateCategoryLock/);
+  assert.match(apiClient, /export async function renameCategory/);
+  assert.match(apiClient, /export async function deleteCategory/);
+  assert.match(apiClient, /export async function updateNote/);
+  assert.match(apiClient, /export async function deleteNote/);
   assert.match(apiClient, /clientRecordingId/);
   assert.match(supabaseServer, /is_locked/);
+  assert.match(supabaseServer, /updateNoteForUser/);
+  assert.match(supabaseServer, /deleteNoteForUser/);
+  assert.match(supabaseServer, /renameCategoryForUser/);
+  assert.match(supabaseServer, /deleteCategoryForUser/);
+  assert.match(supabaseServer, /path_cache: nextPathCacheByCategoryId\.get/);
+  assert.match(supabaseServer, /collectDescendantCategoryIds/);
   assert.match(supabaseServer, /path_cache/);
+  assert.match(apiClient, /CATEGORY_HAS_DEPENDENCIES/);
 });
 
 test('notes page batches refresh state updates after optional note refetch', async () => {

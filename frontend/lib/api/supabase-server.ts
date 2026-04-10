@@ -36,6 +36,11 @@ export type CategoryTreeNode = {
   children: CategoryTreeNode[];
 };
 
+type CategoryPatchInput = {
+  isLocked?: boolean;
+  name?: string;
+};
+
 type CredentialUpdateAttemptRow = {
   created_at: string;
 };
@@ -155,6 +160,139 @@ export async function updateCategoryLock(userId: string, categoryId: string, isL
     depth: path.split('>').length,
     isLocked: row.is_locked
   };
+}
+
+export async function renameCategoryForUser(userId: string, categoryId: string, name: string) {
+  return patchCategoryForUser(userId, categoryId, { name });
+}
+
+function collectDescendantCategoryIds(categories: CategoryRow[], categoryId: string): string[] {
+  const descendants: string[] = [];
+  const queue = [categoryId];
+  while (queue.length > 0) {
+    const parentId = queue.shift();
+    if (!parentId) continue;
+    for (const category of categories) {
+      if (category.parent_id !== parentId) continue;
+      descendants.push(category.id);
+      queue.push(category.id);
+    }
+  }
+  return descendants;
+}
+
+function buildPathCacheByCategoryId(categories: CategoryRow[]): Map<string, string> {
+  const byId = new Map(categories.map((category) => [category.id, category]));
+  const cache = new Map<string, string>();
+
+  const visit = (categoryId: string): string => {
+    const existingPath = cache.get(categoryId);
+    if (existingPath) return existingPath;
+    const category = byId.get(categoryId);
+    if (!category) return '';
+    const parentPath = category.parent_id ? visit(category.parent_id) : '';
+    const path = parentPath ? `${parentPath}>${category.name}` : category.name;
+    cache.set(categoryId, path);
+    return path;
+  };
+
+  for (const category of categories) visit(category.id);
+  return cache;
+}
+
+export async function patchCategoryForUser(userId: string, categoryId: string, input: CategoryPatchInput) {
+  const supabase = getSupabase();
+  const hasName = typeof input.name === 'string';
+  const hasLock = typeof input.isLocked === 'boolean';
+  if (!hasName && !hasLock) return null;
+
+  const { data, error } = await supabase.from('categories').select('id,parent_id,name,path_cache,is_locked').eq('user_id', userId);
+  if (error) throw error;
+
+  const categories = (data ?? []) as CategoryRow[];
+  const target = categories.find((category) => category.id === categoryId);
+  if (!target) return null;
+
+  const nextCategories = categories.map((category) => (
+    category.id === categoryId && hasName
+      ? { ...category, name: (input.name as string).trim() }
+      : category
+  ));
+  const nextPathCacheByCategoryId = buildPathCacheByCategoryId(nextCategories);
+  const descendants = collectDescendantCategoryIds(nextCategories, categoryId);
+  const nextUpdatedAt = new Date().toISOString();
+
+  const patch = { updated_at: nextUpdatedAt } as Record<string, unknown>;
+  if (hasLock) patch.is_locked = input.isLocked;
+  if (hasName) {
+    patch.name = (input.name as string).trim();
+    patch.path_cache = nextPathCacheByCategoryId.get(categoryId);
+  }
+
+  const { data: updatedTarget, error: updateError } = await supabase
+    .from('categories')
+    .update(patch)
+    .eq('id', categoryId)
+    .eq('user_id', userId)
+    .select('id,parent_id,name,path_cache,is_locked')
+    .maybeSingle();
+  if (updateError) throw updateError;
+  if (!updatedTarget) return null;
+
+  if (hasName && descendants.length > 0) {
+    await Promise.all(descendants.map(async (id) => {
+      const { error: descendantError } = await supabase
+        .from('categories')
+        .update({ path_cache: nextPathCacheByCategoryId.get(id), updated_at: nextUpdatedAt })
+        .eq('id', id)
+        .eq('user_id', userId);
+      if (descendantError) throw descendantError;
+    }));
+  }
+
+  const row = updatedTarget as CategoryRow;
+  const path = row.path_cache?.trim() || row.name;
+  return { id: row.id, parent_id: row.parent_id, name: row.name, path, depth: path.split('>').length, isLocked: row.is_locked };
+}
+
+export async function deleteCategoryForUser(userId: string, categoryId: string) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('categories')
+    .delete()
+    .eq('id', categoryId)
+    .eq('user_id', userId)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+export async function updateNoteForUser(userId: string, noteId: string, text: string) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('notes')
+    .update({ text, updated_at: new Date().toISOString() })
+    .eq('id', noteId)
+    .eq('user_id', userId)
+    .select('id,text,created_at')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return { id: data.id as string, text: data.text as string, createdAt: data.created_at as string };
+}
+
+export async function deleteNoteForUser(userId: string, noteId: string) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('notes')
+    .delete()
+    .eq('id', noteId)
+    .eq('user_id', userId)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
 }
 
 export async function getUploadJobByIdempotencyKey(userId: string, idempotencyKey: string) {

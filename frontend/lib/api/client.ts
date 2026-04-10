@@ -18,6 +18,14 @@ async function authFetch(input: RequestInfo | URL, init?: RequestInit) {
   });
 }
 
+async function readApiError(response: Response, fallbackMessage: string) {
+  const payload = await response.json().catch(() => null) as { error?: unknown; errorCode?: unknown } | null;
+  if (payload?.errorCode === 'CATEGORY_HAS_DEPENDENCIES') {
+    return 'Cannot delete category with notes or sub-categories.';
+  }
+  return typeof payload?.error === 'string' ? payload.error : fallbackMessage;
+}
+
 export async function uploadAudio(formData: FormData) {
   const response = await authFetch('/api/audio/upload', { method: 'POST', body: formData });
   if (!response.ok) throw new Error('Upload failed');
@@ -75,6 +83,38 @@ export async function updateCategoryLock(categoryId: string, isLocked: boolean) 
     body: JSON.stringify({ isLocked })
   });
   if (!response.ok) throw new Error('Failed to update category lock');
+  return response.json();
+}
+
+export async function renameCategory(categoryId: string, name: string) {
+  const response = await authFetch(`/api/categories/${categoryId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  if (!response.ok) throw new Error('Failed to rename category');
+  return response.json();
+}
+
+export async function deleteCategory(categoryId: string) {
+  const response = await authFetch(`/api/categories/${categoryId}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error(await readApiError(response, 'Failed to delete category'));
+  return response.json();
+}
+
+export async function updateNote(noteId: string, text: string) {
+  const response = await authFetch(`/api/notes/${noteId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text })
+  });
+  if (!response.ok) throw new Error('Failed to update note');
+  return response.json();
+}
+
+export async function deleteNote(noteId: string) {
+  const response = await authFetch(`/api/notes/${noteId}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error('Failed to delete note');
   return response.json();
 }
 
