@@ -55,12 +55,6 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized', errorCode: 'UNAUTHORIZED' }, { status: 401 });
     }
-    if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === '23503') {
-      return NextResponse.json(
-        { error: 'Category has dependent notes or sub-categories', errorCode: 'CATEGORY_HAS_DEPENDENCIES' },
-        { status: 409 }
-      );
-    }
     console.error(
       '[category_delete_route_failed]',
       JSON.stringify({ errorCode: 'CATEGORY_DELETE_FAILED', safeDetails: scrubSensitiveFields(error) })

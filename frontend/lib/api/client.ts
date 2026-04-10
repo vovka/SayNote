@@ -20,9 +20,6 @@ async function authFetch(input: RequestInfo | URL, init?: RequestInit) {
 
 async function readApiError(response: Response, fallbackMessage: string) {
   const payload = await response.json().catch(() => null) as { error?: unknown; errorCode?: unknown } | null;
-  if (payload?.errorCode === 'CATEGORY_HAS_DEPENDENCIES') {
-    return 'Cannot delete category with notes or sub-categories.';
-  }
   return typeof payload?.error === 'string' ? payload.error : fallbackMessage;
 }
 

@@ -46,7 +46,7 @@ create table if not exists processing_jobs (
 create table if not exists notes (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
-  category_id uuid not null references categories(id),
+  category_id uuid not null constraint notes_category_id_fkey references categories(id) on delete cascade,
   source_job_id uuid not null unique references processing_jobs(id),
   text text not null,
   created_at timestamptz not null default now(),
