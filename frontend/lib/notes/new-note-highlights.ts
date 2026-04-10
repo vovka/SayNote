@@ -32,22 +32,48 @@ export class NoteHighlightTracker {
 
   private seenIds = new Set<string>();
 
+  private highlightedAt = new Map<string, number>();
+
+  private readonly durationMs: number;
+
+  private readonly now: () => number;
+
+  constructor(options?: { durationMs?: number; now?: () => number }) {
+    this.durationMs = options?.durationMs ?? 5_000;
+    this.now = options?.now ?? Date.now;
+  }
+
   next(nodes: TreeNode[]): Set<string> {
     const currentIds = collectNoteIds(nodes);
+    const currentTime = this.now();
 
     if (this.previousIds.size === 0) {
       this.previousIds = new Set(currentIds);
       return new Set();
     }
 
-    const nextIds = toNewIds(currentIds, this.previousIds, this.seenIds);
+    const newIds = toNewIds(currentIds, this.previousIds, this.seenIds);
     this.previousIds = new Set(currentIds);
-    return nextIds;
+
+    for (const id of newIds) {
+      this.highlightedAt.set(id, currentTime);
+    }
+
+    const active = new Set<string>();
+    for (const [id, startTime] of this.highlightedAt) {
+      if (currentTime - startTime < this.durationMs) {
+        active.add(id);
+      } else {
+        this.highlightedAt.delete(id);
+      }
+    }
+    return active;
   }
 
   reset() {
     this.previousIds = new Set();
     this.seenIds = new Set();
+    this.highlightedAt = new Map();
   }
 }
 

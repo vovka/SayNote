@@ -22,13 +22,12 @@ test('notes page keeps lifecycle status messaging for terminal and ready states'
 });
 
 
-test('notes page keeps one timeout per success item without timer reset cascades', async () => {
+test('notes page shows active sync items compactly in the recorder area', async () => {
   const source = await readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8');
 
-  assert.match(source, /const successDismissTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>\(new Map\(\)\);/);
-  assert.match(source, /if \(dismissedSyncSuccessKeys\.has\(successKey\) \|\| successDismissTimersRef\.current\.has\(successKey\)\) return;/);
-  assert.match(source, /successDismissTimersRef\.current\.set\(successKey, timer\);/);
-  assert.match(source, /successDismissTimersRef\.current\.delete\(successKey\);/);
+  assert.match(source, /visibleSyncItems\.filter\(\(item\) => getSyncStageVisual\(item\)\.isBusy\)/);
+  assert.match(source, /className="sync-spinner"/);
+  assert.doesNotMatch(source, /<h2>Sync status<\/h2>/);
 });
 
 test('notes page validates auth before recording and reports specific start errors', async () => {

@@ -506,38 +506,6 @@ function NotesPageContent() {
       <section style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 240px' }}>
         <AuthControls />
         <h1>Notes</h1>
-        <section>
-          <h2>Sync status</h2>
-          <p><small>Only local pending and failed sync items render here. Processed notes render in the categorized list below.</small></p>
-          {visibleSyncItems.length === 0 ? <p>No local sync activity yet.</p> : (
-            <ul>
-              {visibleSyncItems.map((item) => {
-                const visual = getSyncStageVisual(item);
-                const recordedAt = new Date(item.createdAt).toLocaleString();
-                const liveText = `${item.label}. Recorded ${recordedAt}. ${visual.liveText}`;
-                return (
-                  <li key={item.id} style={{ marginBottom: 10 }} aria-busy={visual.isBusy}>
-                    <strong style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      {visual.showSpinner ? <span className="sync-spinner" aria-hidden /> : null}
-                      {item.label}
-                    </strong>
-                    <span className="sync-status-live" role="status">
-                      {liveText}
-                    </span>
-                    <div><small>Stage: {labelForLifecycleStage(lifecycleStageFromRecording(item), item.failedStage === 'upload' ? item.uploadRetryCount : item.processingRetryCount)}</small></div>
-                    <div><small>Recorded: {new Date(item.createdAt).toLocaleString()}</small></div>
-                    <div><small>Updated: {new Date(item.statusUpdatedAt).toLocaleString()}</small></div>
-                    {item.nextUploadRetryAt ? <div><small>Next upload retry: {new Date(item.nextUploadRetryAt).toLocaleString()}</small></div> : null}
-                    {item.nextProcessingRetryAt ? <div><small>Next processing check: {new Date(item.nextProcessingRetryAt).toLocaleString()}</small></div> : null}
-                    {item.uploadCompletedAt ? <div><small>Uploaded: {new Date(item.uploadCompletedAt).toLocaleString()}</small></div> : null}
-                    {item.processedAt ? <div><small>Processed: {new Date(item.processedAt).toLocaleString()}</small></div> : null}
-                    {item.lastError ? <div><small>Error: {item.lastError}</small></div> : null}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
         {trees.map((node) => (
             <CategoryTree
               key={node.id}
@@ -632,6 +600,12 @@ function NotesPageContent() {
           <div>
             <strong>Quick recorder</strong>
             <p style={{ margin: '6px 0 0', opacity: 0.8 }}>{status}</p>
+            {visibleSyncItems.filter((item) => getSyncStageVisual(item).isBusy).map((item) => (
+              <p key={item.id} style={{ margin: '4px 0 0', opacity: 0.7, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span className="sync-spinner" aria-hidden />
+                <span>{item.label}</span>
+              </p>
+            ))}
             <p style={{ margin: '6px 0 0' }}>
               <button
                 ref={settingsButtonRef}
@@ -705,17 +679,6 @@ function NotesPageContent() {
           border-top-color: #111827;
           border-radius: 9999px;
           animation: sync-status-spin 0.8s linear infinite;
-        }
-        .sync-status-live {
-          position: absolute;
-          width: 1px;
-          height: 1px;
-          padding: 0;
-          margin: -1px;
-          overflow: hidden;
-          clip: rect(0, 0, 0, 0);
-          white-space: nowrap;
-          border: 0;
         }
         @media (prefers-reduced-motion: reduce) {
           .sync-spinner {
