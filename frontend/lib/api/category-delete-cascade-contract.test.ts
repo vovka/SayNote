@@ -10,7 +10,7 @@ test('category delete cascade contract covers nested categories and notes', asyn
   ]);
 
   assert.match(schemaSource, /parent_id uuid references categories\(id\) on delete cascade/);
-  assert.match(schemaSource, /category_id uuid not null references categories\(id\) on delete cascade/);
+  assert.match(schemaSource, /category_id uuid not null constraint notes_category_id_fkey references categories\(id\) on delete cascade/);
   assert.match(routeSource, /const deleted = await deleteCategoryForUser\(userId, id\);/);
   assert.doesNotMatch(routeSource, /CATEGORY_HAS_DEPENDENCIES/);
   assert.doesNotMatch(apiClientSource, /CATEGORY_HAS_DEPENDENCIES/);

@@ -13,5 +13,5 @@ test('schema enforces normalized sibling uniqueness, lock state columns, and use
   assert.match(source, /create index if not exists categories_user_id_idx on categories \(user_id\);/);
   assert.match(source, /create index if not exists processing_jobs_user_id_idx on processing_jobs \(user_id\);/);
   assert.match(source, /create index if not exists notes_user_id_idx on notes \(user_id\);/);
-  assert.match(source, /category_id uuid not null references categories\(id\) on delete cascade/);
+  assert.match(source, /category_id uuid not null constraint notes_category_id_fkey references categories\(id\) on delete cascade/);
 });
