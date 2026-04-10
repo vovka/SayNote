@@ -100,11 +100,9 @@ function CategoryTree({
   const [editingCategoryName, setEditingCategoryName] = useState<string | null>(null);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const editCancelledRef = useRef(false);
   const nextPath = [...path, node.name];
   const isCategoryHighlighted = node.notes.some((note) => highlightedNoteIds.has(note.id));
-  const highlightKey = isCategoryHighlighted
-    ? node.notes.filter((n) => highlightedNoteIds.has(n.id)).map((n) => n.id).join(',')
-    : '';
   const lockControlStyle: CSSProperties = useMemo(
     () => ({
       display: 'inline-flex',
@@ -125,7 +123,12 @@ function CategoryTree({
     [isLockControlFocused, node.isLocked]
   );
 
-  const commitCategoryRename = () => {
+  const handleCategoryBlur = () => {
+    if (editCancelledRef.current) {
+      editCancelledRef.current = false;
+      setEditingCategoryName(null);
+      return;
+    }
     const trimmed = editingCategoryName?.trim();
     if (trimmed && trimmed !== node.name) {
       onRenameCategory(node.id, trimmed);
@@ -133,7 +136,13 @@ function CategoryTree({
     setEditingCategoryName(null);
   };
 
-  const commitNoteEdit = (noteId: string) => {
+  const handleNoteBlur = (noteId: string) => {
+    if (editCancelledRef.current) {
+      editCancelledRef.current = false;
+      setEditingNoteId(null);
+      setEditText('');
+      return;
+    }
     const trimmed = editText.trim();
     const note = node.notes.find((n) => n.id === noteId);
     if (trimmed && note && trimmed !== note.text) {
@@ -145,7 +154,6 @@ function CategoryTree({
 
   return (
     <section
-      key={highlightKey || undefined}
       className={isCategoryHighlighted ? 'category--has-new-note' : undefined}
       style={{ marginLeft: path.length * 16 }}
     >
@@ -155,8 +163,8 @@ function CategoryTree({
             autoFocus
             value={editingCategoryName}
             onChange={(e) => setEditingCategoryName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') commitCategoryRename(); if (e.key === 'Escape') setEditingCategoryName(null); }}
-            onBlur={commitCategoryRename}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { editCancelledRef.current = true; e.currentTarget.blur(); } }}
+            onBlur={handleCategoryBlur}
             style={{ font: 'inherit', fontWeight: 'inherit', padding: '0 4px', border: '1px solid #d1d5db', borderRadius: 4 }}
           />
         ) : (
@@ -190,8 +198,8 @@ function CategoryTree({
                     autoFocus
                     value={editText}
                     onChange={(e) => setEditText(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') commitNoteEdit(note.id); if (e.key === 'Escape') { setEditingNoteId(null); setEditText(''); } }}
-                    onBlur={() => commitNoteEdit(note.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { editCancelledRef.current = true; e.currentTarget.blur(); } }}
+                    onBlur={() => handleNoteBlur(note.id)}
                     style={{ flex: 1, font: 'inherit', padding: '0 4px', border: '1px solid #d1d5db', borderRadius: 4 }}
                   />
                 ) : (

@@ -57,11 +57,21 @@ test('already-highlighted notes do not flash again when they return later', () =
   tracker.next(tree(['a', 'b', 'c']));
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), ['d']);
 
-  // 'e' replaces 'd'
+  // 'e' replaces 'd' as the highlight
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'e']))), ['e']);
 
-  // 'd' comes back — should not re-highlight
-  assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), ['e']);
+  // 'd' comes back but 'e' is gone from the tree — no highlights remain, and 'd' is not re-highlighted
+  assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), []);
+});
+
+test('highlight is cleared when the highlighted note is deleted', () => {
+  const tracker = new NoteHighlightTracker();
+
+  tracker.next(tree(['a', 'b', 'c']));
+  assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), ['d']);
+
+  // 'd' is deleted from the tree
+  assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'c']))), []);
 });
 
 test('highlight is removed after page leave and re-enter', () => {

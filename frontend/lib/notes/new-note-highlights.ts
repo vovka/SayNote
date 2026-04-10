@@ -39,6 +39,7 @@ export class NoteHighlightTracker {
 
     if (this.previousIds.size === 0) {
       this.previousIds = new Set(currentIds);
+      this.seenIds = new Set(currentIds);
       return new Set();
     }
 
@@ -47,6 +48,11 @@ export class NoteHighlightTracker {
 
     if (newIds.size > 0) {
       this.activeHighlights = newIds;
+    } else {
+      const currentIdsSet = new Set(currentIds);
+      this.activeHighlights = new Set(
+        Array.from(this.activeHighlights).filter((id) => currentIdsSet.has(id))
+      );
     }
 
     return new Set(this.activeHighlights);
