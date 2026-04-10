@@ -25,7 +25,8 @@ test('notes page keeps lifecycle status messaging for terminal and ready states'
 test('notes page shows active sync items compactly in the recorder area', async () => {
   const source = await readFile(new URL('../../app/notes/page.tsx', import.meta.url), 'utf8');
 
-  assert.match(source, /visibleSyncItems\.filter\(\(item\) => getSyncStageVisual\(item\)\.isBusy\)/);
+  assert.match(source, /v\.isBusy \|\| v\.stage\.startsWith\('failed_'\)/);
+  assert.match(source, /role="status" aria-live="polite"/);
   assert.match(source, /className="sync-spinner"/);
   assert.doesNotMatch(source, /<h2>Sync status<\/h2>/);
 });

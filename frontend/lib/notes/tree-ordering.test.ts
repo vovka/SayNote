@@ -89,6 +89,17 @@ test('sortCategoryTreeNewestFirst sorts root categories by descendant activity',
   assert.deepEqual(sorted.map((node) => node.id), ['root-with-deep-new-note', 'root-with-old-note']);
 });
 
+test('sortCategoryTreeNewestFirst handles empty categories without NaN sorting issues', () => {
+  const sorted = sortCategoryTreeNewestFirst([
+    { id: 'empty-b', notes: [], children: [] },
+    { id: 'empty-a', notes: [], children: [] },
+    { id: 'has-note', notes: [{ id: 'n1', createdAt: '2026-04-07T10:00:00.000Z' }], children: [] }
+  ]);
+
+  assert.equal(sorted[0]?.id, 'has-note');
+  assert.deepEqual(sorted.slice(1).map((n) => n.id), ['empty-a', 'empty-b']);
+});
+
 test('sortCategoryTreeNewestFirst sorts children by latest descendant activity', () => {
   const sorted = sortCategoryTreeNewestFirst([
     {

@@ -600,12 +600,17 @@ function NotesPageContent() {
           <div>
             <strong>Quick recorder</strong>
             <p style={{ margin: '6px 0 0', opacity: 0.8 }}>{status}</p>
-            {visibleSyncItems.filter((item) => getSyncStageVisual(item).isBusy).map((item) => (
-              <p key={item.id} style={{ margin: '4px 0 0', opacity: 0.7, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span className="sync-spinner" aria-hidden />
-                <span>{item.label}</span>
-              </p>
-            ))}
+            <div role="status" aria-live="polite">
+              {visibleSyncItems.filter((item) => { const v = getSyncStageVisual(item); return v.isBusy || v.stage.startsWith('failed_'); }).map((item) => {
+                const visual = getSyncStageVisual(item);
+                return (
+                  <p key={item.id} style={{ margin: '4px 0 0', opacity: 0.7, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {visual.showSpinner ? <span className="sync-spinner" aria-hidden /> : null}
+                    <span>{item.label}</span>
+                  </p>
+                );
+              })}
+            </div>
             <p style={{ margin: '6px 0 0' }}>
               <button
                 ref={settingsButtonRef}
