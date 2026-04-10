@@ -57,7 +57,6 @@ test('notes page renders accessible lock state control and toggles lock state vi
   assert.match(supabaseServer, /path_cache: nextPathCacheByCategoryId\.get/);
   assert.match(supabaseServer, /collectDescendantCategoryIds/);
   assert.match(supabaseServer, /path_cache/);
-  assert.match(apiClient, /CATEGORY_HAS_DEPENDENCIES/);
 });
 
 test('notes page batches refresh state updates after optional note refetch', async () => {

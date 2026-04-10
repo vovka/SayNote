@@ -33,3 +33,16 @@ test('incremental migrations include user review cursors used by the worker', as
   assert.match(migrationSource, /enable row level security/i);
   assert.match(migrationSource, /users_manage_own_review_cursor/);
 });
+
+
+test('incremental migrations enforce cascade deletes from categories to notes', async () => {
+  const migrationSource = await readFile(
+    new URL('../../db/migrations/20260410_notes_category_delete_cascade.sql', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(migrationSource, /drop constraint if exists notes_category_id_fkey/i);
+  assert.match(migrationSource, /add constraint notes_category_id_fkey/i);
+  assert.match(migrationSource, /references categories\(id\)/i);
+  assert.match(migrationSource, /on delete cascade/i);
+});
