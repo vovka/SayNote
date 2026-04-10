@@ -43,3 +43,47 @@ test('sortCategoryTreeNewestFirst falls back to note id ordering for same create
 
   assert.deepEqual(sorted[0]?.notes.map((note) => note.id), ['note-b', 'note-a']);
 });
+
+test('sortCategoryTreeNewestFirst sorts children by latest descendant activity', () => {
+  const sorted = sortCategoryTreeNewestFirst([
+    {
+      id: 'root',
+      notes: [],
+      children: [
+        {
+          id: 'older-child',
+          notes: [{ id: 'older-note', createdAt: '2026-04-07T12:00:00.000Z' }],
+          children: []
+        },
+        {
+          id: 'descendant-newest-child',
+          notes: [],
+          children: [
+            {
+              id: 'grandchild',
+              notes: [{ id: 'grandchild-note', createdAt: '2026-04-08T09:00:00.000Z' }],
+              children: []
+            }
+          ]
+        },
+        {
+          id: 'same-activity-a',
+          notes: [{ id: 'same-a', createdAt: '2026-04-07T15:00:00.000Z' }],
+          children: []
+        },
+        {
+          id: 'same-activity-b',
+          notes: [{ id: 'same-b', createdAt: '2026-04-07T15:00:00.000Z' }],
+          children: []
+        }
+      ]
+    }
+  ]);
+
+  assert.deepEqual(sorted[0]?.children.map((child) => child.id), [
+    'descendant-newest-child',
+    'same-activity-a',
+    'same-activity-b',
+    'older-child'
+  ]);
+});
