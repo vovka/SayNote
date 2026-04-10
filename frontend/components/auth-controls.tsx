@@ -20,7 +20,7 @@ export function AuthControls() {
   }
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <small>{email ?? 'Signed in'}</small>
       <button onClick={signOut}>Sign out</button>
     </div>

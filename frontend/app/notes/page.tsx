@@ -90,14 +90,21 @@ function CategoryTree({
   node: CategoryNode;
   path?: string[];
   onToggleLock: (node: CategoryNode) => void;
-  onRenameCategory: (node: CategoryNode) => void;
+  onRenameCategory: (categoryId: string, newName: string) => void;
   onDeleteCategory: (node: CategoryNode) => void;
-  onEditNote: (categoryId: string, note: NoteSummary) => void;
+  onEditNote: (categoryId: string, noteId: string, newText: string) => void;
   onDeleteNote: (categoryId: string, note: NoteSummary) => void;
   highlightedNoteIds: Set<string>;
 }) {
   const [isLockControlFocused, setLockControlFocused] = useState(false);
+  const [editingCategoryName, setEditingCategoryName] = useState<string | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
   const nextPath = [...path, node.name];
+  const isCategoryHighlighted = node.notes.some((note) => highlightedNoteIds.has(note.id));
+  const highlightKey = isCategoryHighlighted
+    ? node.notes.filter((n) => highlightedNoteIds.has(n.id)).map((n) => n.id).join(',')
+    : '';
   const lockControlStyle: CSSProperties = useMemo(
     () => ({
       display: 'inline-flex',
@@ -118,10 +125,43 @@ function CategoryTree({
     [isLockControlFocused, node.isLocked]
   );
 
+  const commitCategoryRename = () => {
+    const trimmed = editingCategoryName?.trim();
+    if (trimmed && trimmed !== node.name) {
+      onRenameCategory(node.id, trimmed);
+    }
+    setEditingCategoryName(null);
+  };
+
+  const commitNoteEdit = (noteId: string) => {
+    const trimmed = editText.trim();
+    const note = node.notes.find((n) => n.id === noteId);
+    if (trimmed && note && trimmed !== note.text) {
+      onEditNote(node.id, noteId, trimmed);
+    }
+    setEditingNoteId(null);
+    setEditText('');
+  };
+
   return (
-    <section style={{ marginLeft: path.length * 16 }}>
+    <section
+      key={highlightKey || undefined}
+      className={isCategoryHighlighted ? 'category--has-new-note' : undefined}
+      style={{ marginLeft: path.length * 16 }}
+    >
       <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {node.name}
+        {editingCategoryName !== null ? (
+          <input
+            autoFocus
+            value={editingCategoryName}
+            onChange={(e) => setEditingCategoryName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitCategoryRename(); if (e.key === 'Escape') setEditingCategoryName(null); }}
+            onBlur={commitCategoryRename}
+            style={{ font: 'inherit', fontWeight: 'inherit', padding: '0 4px', border: '1px solid #d1d5db', borderRadius: 4 }}
+          />
+        ) : (
+          <span onDoubleClick={() => setEditingCategoryName(node.name)} style={{ cursor: 'default' }}>{node.name}</span>
+        )}
         <button
           type="button"
           aria-label={node.isLocked ? `Unlock category ${node.name}` : `Lock category ${node.name}`}
@@ -133,8 +173,7 @@ function CategoryTree({
         >
           <span aria-hidden="true">{node.isLocked ? '🔐' : '🔓'}</span>
         </button>
-        <button type="button" onClick={() => onRenameCategory(node)}>Rename</button>
-        <button type="button" onClick={() => onDeleteCategory(node)}>Delete</button>
+        <button type="button" onClick={() => onDeleteCategory(node)} aria-label={`Delete category ${node.name}`} title="Delete category" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, padding: '0 4px', color: '#9ca3af', lineHeight: 1 }}>×</button>
       </h3>
       <ul>
         {node.notes.map((note) => {
@@ -146,11 +185,19 @@ function CategoryTree({
               className={isHighlighted ? 'note-item--new' : undefined}
             >
               <p style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                <span>{note.text}</span>
-                <span style={{ display: 'inline-flex', gap: 8 }}>
-                  <button type="button" onClick={() => onEditNote(node.id, note)}>Edit</button>
-                  <button type="button" onClick={() => onDeleteNote(node.id, note)}>Delete</button>
-                </span>
+                {editingNoteId === note.id ? (
+                  <input
+                    autoFocus
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') commitNoteEdit(note.id); if (e.key === 'Escape') { setEditingNoteId(null); setEditText(''); } }}
+                    onBlur={() => commitNoteEdit(note.id)}
+                    style={{ flex: 1, font: 'inherit', padding: '0 4px', border: '1px solid #d1d5db', borderRadius: 4 }}
+                  />
+                ) : (
+                  <span onDoubleClick={() => { setEditingNoteId(note.id); setEditText(note.text); }} style={{ cursor: 'default' }}>{note.text}</span>
+                )}
+                <button type="button" onClick={() => onDeleteNote(node.id, note)} aria-label="Delete note" title="Delete note" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, padding: '0 4px', color: '#9ca3af', lineHeight: 1, flexShrink: 0 }}>×</button>
                 <small style={{ color: '#6b7280' }}>{new Date(note.createdAt).toLocaleString()}</small>
               </p>
             </li>
@@ -402,17 +449,15 @@ function NotesPageContent() {
     }
   };
 
-  const handleRenameCategory = async (node: CategoryNode) => {
-    const nextName = window.prompt('Rename category', node.name)?.trim();
-    if (!nextName || nextName === node.name) return;
+  const handleRenameCategory = async (categoryId: string, newName: string) => {
     const previousTrees = trees;
     setActionError(null);
-    setTrees((previous) => renameNode(previous, node.id, nextName));
+    setTrees((previous) => renameNode(previous, categoryId, newName));
     try {
-      await renameCategory(node.id, nextName);
+      await renameCategory(categoryId, newName);
     } catch {
       setTrees(previousTrees);
-      setActionError(`Failed to rename category ${node.name}.`);
+      setActionError('Failed to rename category.');
     }
   };
 
@@ -430,14 +475,12 @@ function NotesPageContent() {
     }
   };
 
-  const handleEditNote = async (categoryId: string, note: NoteSummary) => {
-    const nextText = window.prompt('Edit note', note.text)?.trim();
-    if (!nextText || nextText === note.text) return;
+  const handleEditNote = async (categoryId: string, noteId: string, newText: string) => {
     const previousTrees = trees;
     setActionError(null);
-    setTrees((previous) => updateNodeNoteText(previous, categoryId, note.id, nextText));
+    setTrees((previous) => updateNodeNoteText(previous, categoryId, noteId, newText));
     try {
-      await updateNote(note.id, nextText);
+      await updateNote(noteId, newText);
     } catch {
       setTrees(previousTrees);
       setActionError('Failed to update note.');
@@ -504,7 +547,26 @@ function NotesPageContent() {
   return (
     <main style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <section style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 240px' }}>
-        <AuthControls />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <AuthControls />
+          <button
+            ref={settingsButtonRef}
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              color: '#0070f3',
+              textDecoration: 'underline',
+              cursor: 'pointer',
+              fontSize: 'inherit',
+              fontFamily: 'inherit'
+            }}
+          >
+            Settings
+          </button>
+        </div>
         <h1>Notes</h1>
         {trees.map((node) => (
             <CategoryTree
@@ -601,7 +663,7 @@ function NotesPageContent() {
             <strong>Quick recorder</strong>
             <p style={{ margin: '6px 0 0', opacity: 0.8 }}>{status}</p>
             <div role="status" aria-live="polite">
-              {visibleSyncItems.filter((item) => { const v = getSyncStageVisual(item); return v.isBusy || v.stage.startsWith('failed_'); }).map((item) => {
+              {visibleSyncItems.filter((item) => { const v = getSyncStageVisual(item); return v.isBusy || v.stage.startsWith('failed_'); }).slice(0, 1).map((item) => {
                 const visual = getSyncStageVisual(item);
                 return (
                   <p key={item.id} style={{ margin: '4px 0 0', opacity: 0.7, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -611,25 +673,6 @@ function NotesPageContent() {
                 );
               })}
             </div>
-            <p style={{ margin: '6px 0 0' }}>
-              <button
-                ref={settingsButtonRef}
-                type="button"
-                onClick={() => setIsSettingsOpen(true)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: 0,
-                  color: '#0070f3',
-                  textDecoration: 'underline',
-                  cursor: 'pointer',
-                  fontSize: 'inherit',
-                  fontFamily: 'inherit'
-                }}
-              >
-                Settings
-              </button>
-            </p>
           </div>
         </div>
       </section>
@@ -638,6 +681,14 @@ function NotesPageContent() {
       <SettingsModal isOpen={isSettingsOpen} onClose={closeSettings} />
 
       <style jsx>{`
+
+        .category--has-new-note {
+          animation: category-highlight-fade 2s ease-out forwards;
+        }
+        @keyframes category-highlight-fade {
+          0% { background: rgba(59, 130, 246, 0.15); }
+          100% { background: transparent; }
+        }
 
         .note-item--new {
           background: #fff7cc;
@@ -652,6 +703,10 @@ function NotesPageContent() {
           50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.22); }
         }
         @media (prefers-reduced-motion: reduce) {
+          .category--has-new-note {
+            animation: none;
+            background: rgba(59, 130, 246, 0.1);
+          }
           .note-item--new {
             animation: none;
             background: #fff7cc;
