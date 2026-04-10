@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "outDir": "./.ts-unused"
+  },
+  "include": ["worker/**/*.test.ts"],
+  "exclude": []
+}

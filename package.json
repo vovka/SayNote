@@ -1,0 +1,13 @@
+{
+  "name": "saynote",
+  "private": true,
+  "workspaces": ["frontend", "backend", "shared"],
+  "scripts": {
+    "db:bootstrap": "npm run -w backend db:bootstrap",
+    "db:migrate": "npm run -w backend db:migrate",
+    "db:migrate:status": "npm run -w backend db:migrate:status",
+    "test": "npm run -w backend test && npm run -w frontend test",
+    "typecheck": "npm run -w frontend typecheck && npm run -w backend typecheck",
+    "lint": "npm run -w frontend lint"
+  }
+}

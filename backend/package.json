@@ -1,0 +1,21 @@
+{
+  "name": "@saynote/backend",
+  "private": true,
+  "scripts": {
+    "db:bootstrap": "sh scripts/db.sh bootstrap",
+    "db:migrate": "sh scripts/db.sh migrate",
+    "db:migrate:status": "sh scripts/db.sh status",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "node --import ../scripts/register-ts-extensionless-hooks.mjs --test --experimental-strip-types $(find worker -name '*.test.ts' -print)"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1025.0",
+    "pg": "^8.16.3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.8",
+    "@types/pg": "^8.15.5",
+    "typescript": "^5.8.2"
+  }
+}
