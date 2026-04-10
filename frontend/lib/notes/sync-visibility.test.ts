@@ -84,6 +84,21 @@ test('reconcileSyncItemsWithNotes hides pending processing once note exists', ()
   assert.deepEqual(visibleItems.map((item) => item.id), ['rec-uploading', 'rec-keep']);
 });
 
+
+test('reconcileSyncItemsWithNotes emits note-added success for correlated transcribing item', () => {
+  const syncItems = buildSyncStatusItems([
+    makeRecording({ id: 'rec-success', status: 'uploaded_waiting_processing', serverJobId: 'job-success' })
+  ]);
+
+  const visibleItems = reconcileSyncItemsWithNotes(syncItems, [{
+    sourceJobId: 'job-success',
+    clientRecordingId: 'rec-success'
+  }]);
+
+  assert.equal(visibleItems[0]?.transientStatus, 'note_added_success');
+  assert.equal(visibleItems[0]?.label, 'Note added');
+});
+
 test('getSyncStageVisual marks uploading and transcribing stages as busy progress', () => {
   const uploading = getSyncStageVisual(makeRecording({ status: 'uploading' }));
   const transcribing = getSyncStageVisual(makeRecording({ status: 'uploaded_waiting_processing' }));
@@ -92,6 +107,22 @@ test('getSyncStageVisual marks uploading and transcribing stages as busy progres
   assert.equal(uploading.isBusy, true);
   assert.equal(transcribing.showSpinner, true);
   assert.equal(transcribing.isBusy, true);
+});
+
+
+test('getSyncStageVisual marks note-added success as terminal non-busy state', () => {
+  const success = getSyncStageVisual({
+    ...makeRecording({ id: 'rec-success', status: 'uploaded_waiting_processing', serverJobId: 'job-success' }),
+    label: 'Note added',
+    transientStatus: 'note_added_success',
+    clientRecordingId: 'rec-success',
+    sourceJobId: 'job-success'
+  });
+
+  assert.equal(success.stage, 'note_visible');
+  assert.equal(success.showSpinner, false);
+  assert.equal(success.isBusy, false);
+  assert.equal(success.liveText, 'Note added successfully.');
 });
 
 test('getSyncStageVisual marks retryable failures as retrying progress', () => {

@@ -45,6 +45,7 @@ import {
 type CategoryNode = NoteCategoryTreeNode;
 const RECORDING_STATUS_POLL_INTERVAL_MS = 1_000;
 const REFRESH_POLL_INTERVAL_MS = 15_000;
+const NOTE_ADDED_SUCCESS_TIMEOUT_MS = 4_000;
 
 function round(value: number): number {
   return Math.round(value * 100) / 100;
@@ -224,6 +225,13 @@ function flattenNotes(nodes: CategoryNode[]): NoteSummary[] {
   return flattened;
 }
 
+
+function syncItemSuccessKey(item: SyncStatusItem): string {
+  const clientId = item.clientRecordingId ?? item.id;
+  const jobId = item.sourceJobId ?? item.serverJobId ?? 'no-job';
+  return `${clientId}:${jobId}`;
+}
+
 function NotesPageContent() {
   const [trees, setTrees] = useState<CategoryNode[]>([]);
   const [syncItems, setSyncItems] = useState<SyncStatusItem[]>([]);
@@ -241,6 +249,7 @@ function NotesPageContent() {
   const previousVisualState = useRef<RecordingVisualState>('idle');
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [dismissedSyncSuccessKeys, setDismissedSyncSuccessKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     registerServiceWorker();
@@ -340,6 +349,26 @@ function NotesPageContent() {
     if (latestRecording) return statusFromRecording(latestRecording);
     return statusHint;
   }, [actionError, latestRecording, recording, statusHint]);
+
+
+  useEffect(() => {
+    const timers = syncItems
+      .filter((item) => item.transientStatus === 'note_added_success')
+      .filter((item) => !dismissedSyncSuccessKeys.has(syncItemSuccessKey(item)))
+      .map((item) => setTimeout(() => {
+        const successKey = syncItemSuccessKey(item);
+        setDismissedSyncSuccessKeys((previous) => new Set(previous).add(successKey));
+      }, NOTE_ADDED_SUCCESS_TIMEOUT_MS));
+
+    return () => timers.forEach((timer) => clearTimeout(timer));
+  }, [dismissedSyncSuccessKeys, syncItems]);
+
+  const visibleSyncItems = useMemo(
+    () => syncItems.filter((item) => (
+      item.transientStatus !== 'note_added_success' || !dismissedSyncSuccessKeys.has(syncItemSuccessKey(item))
+    )),
+    [dismissedSyncSuccessKeys, syncItems]
+  );
 
   const handleToggleLock = async (node: CategoryNode) => {
     const nextLocked = !node.isLocked;
@@ -460,9 +489,9 @@ function NotesPageContent() {
         <section>
           <h2>Sync status</h2>
           <p><small>Only local pending and failed sync items render here. Processed notes render in the categorized list below.</small></p>
-          {syncItems.length === 0 ? <p>No local sync activity yet.</p> : (
+          {visibleSyncItems.length === 0 ? <p>No local sync activity yet.</p> : (
             <ul>
-              {syncItems.map((item) => {
+              {visibleSyncItems.map((item) => {
                 const visual = getSyncStageVisual(item);
                 const recordedAt = new Date(item.createdAt).toLocaleString();
                 const liveText = `${item.label}. Recorded ${recordedAt}. ${visual.liveText}`;
