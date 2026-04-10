@@ -10,7 +10,9 @@ type SortedNodeResult<T extends NoteListNode> = {
 };
 
 export function sortCategoryTreeNewestFirst<T extends NoteListNode>(nodes: T[]): T[] {
-  return nodes.map((node) => sortNodeWithActivity(node).node);
+  const entries = nodes.map((node, index) => ({ ...sortNodeWithActivity(node), index }));
+  entries.sort(compareByLatestActivity);
+  return entries.map((entry) => entry.node);
 }
 
 function sortNodeWithActivity<T extends NoteListNode>(node: T): SortedNodeResult<T> {
@@ -34,8 +36,9 @@ function compareByLatestActivity<T extends NoteListNode>(
   left: SortedNodeResult<T> & { index: number },
   right: SortedNodeResult<T> & { index: number }
 ): number {
-  const activityDiff = right.activity - left.activity;
-  if (activityDiff !== 0) return activityDiff;
+  if (right.activity !== left.activity) {
+    return right.activity - left.activity;
+  }
   const idDiff = left.node.id.localeCompare(right.node.id);
   if (idDiff !== 0) return idDiff;
   return left.index - right.index;
