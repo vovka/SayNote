@@ -40,13 +40,13 @@ graph TB
     UI -- "start/stop" --> MR
     MR -- "audio blob" --> IDB
     IDB -- "queued recordings" --> SM
-    SW -. "background sync" .-> SM
+    SW -- "background sync" --> SM
 
     SUPA_AUTH -- "Google OAuth JWT" --> UI
 
-    SM -- "upload audio" --> UPLOAD
-    SM -- "poll status" --> JOBS
-    UI -- "CRUD operations" --> DATA_API
+    SM -- "upload audio (JWT)" --> UPLOAD
+    SM -- "poll status (JWT)" --> JOBS
+    UI -- "CRUD operations (JWT)" --> DATA_API
 
     UPLOAD -- "store audio" --> R2
     UPLOAD -- "create job" --> SUPA
@@ -65,7 +65,7 @@ graph TB
     OPENR -- "transcribe +<br/>categorize" --> OPENR_API
 
     PROC -- "insert note +<br/>update job" --> SUPA
-    PROC -. "cleanup audio" .-> R2
+    PROC -- "cleanup audio" --> R2
 
     JOBS -- "read status" --> SUPA
     DATA_API -- "read/write" --> SUPA
