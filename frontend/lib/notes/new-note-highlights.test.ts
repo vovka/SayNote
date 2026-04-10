@@ -25,62 +25,63 @@ test('collectNoteIds keeps deterministic nested note order', () => {
 });
 
 test('note gets highlighted on first appearance after baseline refresh', () => {
-  let time = 1000;
-  const tracker = new NoteHighlightTracker({ durationMs: 5_000, now: () => time });
+  const tracker = new NoteHighlightTracker();
 
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'c']))), []);
-  time = 2000;
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), ['d']);
 });
 
-test('highlight persists across back-to-back refreshes within duration window', () => {
-  let time = 1000;
-  const tracker = new NoteHighlightTracker({ durationMs: 5_000, now: () => time });
+test('highlight persists across back-to-back refreshes with no new notes', () => {
+  const tracker = new NoteHighlightTracker();
 
   tracker.next(tree(['a', 'b', 'c']));
-  time = 2000;
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), ['d']);
-  time = 2100;
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), ['d']);
-  time = 3000;
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), ['d']);
 });
 
-test('highlight expires after duration window', () => {
-  let time = 1000;
-  const tracker = new NoteHighlightTracker({ durationMs: 5_000, now: () => time });
+test('highlight is replaced when a newer note arrives', () => {
+  const tracker = new NoteHighlightTracker();
 
   tracker.next(tree(['a', 'b', 'c']));
-  time = 2000;
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), ['d']);
-  time = 7001;
-  assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), []);
+
+  // new note 'e' replaces 'd' as the highlighted note
+  assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'e']))), ['e']);
+  assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'e']))), ['e']);
 });
 
 test('already-highlighted notes do not flash again when they return later', () => {
-  let time = 1000;
-  const tracker = new NoteHighlightTracker({ durationMs: 5_000, now: () => time });
+  const tracker = new NoteHighlightTracker();
 
   tracker.next(tree(['a', 'b', 'c']));
-  time = 2000;
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), ['d']);
-  time = 3000;
-  assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'e']))), ['d', 'e']);
-  time = 10000;
+
+  // 'e' replaces 'd' as the highlight
+  assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'e']))), ['e']);
+
+  // 'd' comes back but 'e' is gone from the tree — no highlights remain, and 'd' is not re-highlighted
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), []);
 });
 
-test('highlight is removed after page leave and re-enter', () => {
-  let time = 1000;
-  const tracker = new NoteHighlightTracker({ durationMs: 5_000, now: () => time });
+test('highlight is cleared when the highlighted note is deleted', () => {
+  const tracker = new NoteHighlightTracker();
 
   tracker.next(tree(['a', 'b', 'c']));
-  time = 2000;
+  assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), ['d']);
+
+  // 'd' is deleted from the tree
+  assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'c']))), []);
+});
+
+test('highlight is removed after page leave and re-enter', () => {
+  const tracker = new NoteHighlightTracker();
+
+  tracker.next(tree(['a', 'b', 'c']));
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), ['d']);
 
   tracker.reset();
 
-  time = 3000;
   assert.deepEqual(Array.from(tracker.next(tree(['a', 'b', 'd']))), []);
 });
 
