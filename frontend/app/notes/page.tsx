@@ -688,7 +688,7 @@ function NotesPageContent() {
 
       <SettingsModal isOpen={isSettingsOpen} onClose={closeSettings} />
 
-      <style jsx>{`
+      <style jsx global>{`
 
         .category--has-new-note {
           animation: category-highlight-fade 2s ease-out forwards;
