@@ -5,8 +5,11 @@ const retryDelayMs = Math.max(1000, Number(process.env.PROCESSING_RETRY_DELAY_MS
 
 async function claimJob(jobId: string) {
   'use step';
-  const { claimJobById } = await import('@/../backend/worker/claim-job-by-id');
-  return claimJobById(jobId);
+  const [{ withClient }, { claimJobById }] = await Promise.all([
+    import('@/../backend/worker/db'),
+    import('@/../backend/worker/claim-job-by-id')
+  ]);
+  return withClient((client) => claimJobById(client, jobId));
 }
 
 async function processClaimedJob(job: ProcessingJobRow) {
