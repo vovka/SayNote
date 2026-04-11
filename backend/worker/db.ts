@@ -1,4 +1,5 @@
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
+import type { PoolClient } from 'pg';
 
 export interface ProcessingJobRow {
   id: string;
@@ -55,15 +56,19 @@ export interface ReviewCursorRow {
   cursor_after_note_id: string | null;
 }
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required to run the worker.');
+let pool: Pool | null = null;
+
+function getPool(): Pool {
+  if (!pool) {
+    const url = process.env.DATABASE_URL;
+    if (!url) throw new Error('DATABASE_URL is required to run the worker.');
+    pool = new Pool({ connectionString: url });
+  }
+  return pool;
 }
 
-const pool = new Pool({ connectionString: databaseUrl });
-
 export async function withClient<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     return await fn(client);
   } finally {
@@ -274,5 +279,5 @@ export async function markJobFailed(
 }
 
 export async function closePool() {
-  await pool.end();
+  await pool?.end();
 }

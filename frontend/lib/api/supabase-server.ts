@@ -48,15 +48,17 @@ type CredentialUpdateAttemptRow = {
 const CREDENTIAL_UPDATE_RATE_LIMIT_WINDOW_MS = 60_000;
 const CREDENTIAL_UPDATE_RATE_LIMIT_MAX_UPDATES = 5;
 
+let supabaseClient: ReturnType<typeof createClient> | null = null;
+
 function getSupabase() {
+  if (supabaseClient) return supabaseClient;
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
   if (!url || !key) {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured');
   }
-
-  return createClient(url, key, { auth: { persistSession: false } });
+  supabaseClient = createClient(url, key, { auth: { persistSession: false } });
+  return supabaseClient;
 }
 
 function mapUploadJob(data: Record<string, unknown>): UploadJobRecord {
@@ -240,14 +242,14 @@ export async function patchCategoryForUser(userId: string, categoryId: string, i
   if (!updatedTarget) return null;
 
   if (hasName && descendants.length > 0) {
-    await Promise.all(descendants.map(async (id) => {
-      const { error: descendantError } = await supabase
-        .from('categories')
-        .update({ path_cache: nextPathCacheByCategoryId.get(id), updated_at: nextUpdatedAt })
-        .eq('id', id)
-        .eq('user_id', userId);
-      if (descendantError) throw descendantError;
+    const updates = descendants.map((id) => ({
+      id,
+      user_id: userId,
+      path_cache: nextPathCacheByCategoryId.get(id),
+      updated_at: nextUpdatedAt
     }));
+    const { error: descendantError } = await supabase.from('categories').upsert(updates);
+    if (descendantError) throw descendantError;
   }
 
   const row = updatedTarget as CategoryRow;
