@@ -69,6 +69,28 @@ TDD is required for production code changes.
 Every production change must have automated test coverage in the same PR. Every bug fix needs a
 regression test.
 
+## Test Quality
+
+Tests must verify behavior, not source code text.
+
+Never use `readFile` or any mechanism to load source files and then assert on text
+patterns with `assert.match()`. These tests check that code "contains certain words"
+rather than "does the right thing". They give no regression protection and break on
+innocent refactoring.
+
+Instead:
+- Import the module under test and call its public functions.
+- Assert on return values, thrown errors, or observable side effects.
+- For database-touching code, use the mock-client pattern from
+  `backend/worker/categories/resolve-category-path.test.ts`: a thin object that
+  records queries and returns rows from an array.
+- For time-sensitive logic, inject `now: () => number` and advance a variable.
+- For external I/O, inject dependencies through a `deps` object (see `processJob`).
+
+If the behavior you want to guard requires a real database or network, extract the
+pure logic into a testable helper first, or write it as an integration test. Do not
+approximate integration tests by grepping source files for strings.
+
 ## Enforcement Defaults
 
 When reviewing or writing code, check these by default:

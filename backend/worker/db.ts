@@ -1,4 +1,5 @@
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
+import type { PoolClient } from 'pg';
 
 export interface ProcessingJobRow {
   id: string;
