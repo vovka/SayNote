@@ -7,17 +7,32 @@ import {
   buildCredentialStatusCopy,
   buildExecutionPathCopy,
   getDefaultSettingsFormState,
+  getDefaultTranscriptionPreferencesFormState,
   getModelsForProvider,
   hydrateSettingsFormState,
+  hydrateTranscriptionPreferencesFormState,
   isSupportedProvider,
   type SettingsFormState,
+  type TranscriptionPreferencesFormState,
   validateSettingsFormState
 } from '@/lib/settings/ai-config-form';
 
 type Provider = 'groq' | 'openrouter';
 
+const LIVE_LANGUAGE_OPTIONS = [
+  { value: 'en-US', label: 'English (US)' },
+  { value: 'uk-UA', label: 'Ukrainian' },
+  { value: 'en-GB', label: 'English (UK)' },
+  { value: 'de-DE', label: 'German' },
+  { value: 'fr-FR', label: 'French' },
+  { value: 'es-ES', label: 'Spanish' }
+];
+
 export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [formState, setFormState] = useState<SettingsFormState>(getDefaultSettingsFormState);
+  const [preferences, setPreferences] = useState<TranscriptionPreferencesFormState>(
+    getDefaultTranscriptionPreferencesFormState
+  );
   const [credentialInputs, setCredentialInputs] = useState<Record<Provider, string>>({ groq: '', openrouter: '' });
   const [providersWithKey, setProvidersWithKey] = useState<string[]>([]);
   const [message, setMessage] = useState('');
@@ -36,6 +51,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         const config = await getAIConfig();
         if (isCancelled) return;
         setFormState((current) => hydrateSettingsFormState(current, config));
+        setPreferences((current) => hydrateTranscriptionPreferencesFormState(current, config));
         setProvidersWithKey(config.providersWithKey ?? []);
       } catch {
         if (!isCancelled) setMessage('Unable to load existing settings');
@@ -81,15 +97,22 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
     setFormState((current) => ({ ...current, [field]: value }));
   };
 
+  const updatePreferences = <K extends keyof TranscriptionPreferencesFormState>(
+    field: K,
+    value: TranscriptionPreferencesFormState[K]
+  ) => {
+    setPreferences((current) => ({ ...current, [field]: value }));
+  };
+
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const validation = validateSettingsFormState(formState);
     if (!validation.ok) return setMessage(validation.error.message);
     try {
-      await putAIConfig(validation.payload);
-      setMessage('AI routing settings saved');
+      await putAIConfig(validation.payload, preferences);
+      setMessage('Settings saved');
     } catch {
-      setMessage('Failed to save AI settings');
+      setMessage('Failed to save settings');
     }
   };
 
@@ -110,7 +133,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
 
   return (
     <section
-      aria-label="AI settings backdrop"
+      aria-label="Settings backdrop"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -130,104 +153,171 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         }}
       >
         <p style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 0 }}>
-          <strong id="settings-modal-title">AI Settings</strong>
+          <strong id="settings-modal-title">Settings</strong>
           <button ref={closeButtonRef} type="button" aria-label="Close settings" onClick={onClose}>
             Close
           </button>
         </p>
-        <p>{buildExecutionPathCopy(formState)}</p>
-        {isLoading ? <p>Loading AI config…</p> : null}
+        <p>{buildExecutionPathCopy(formState, preferences)}</p>
+        {isLoading ? <p>Loading settings…</p> : null}
         <form onSubmit={onSubmit}>
           <fieldset>
-            <legend>Primary provider path</legend>
+            <legend>Recording mode</legend>
+            <p style={{ fontSize: '0.85em', color: '#555', marginTop: 0 }}>
+              Standard mode works offline and processes notes in the background. Live mode requires an internet
+              connection and streams audio to Azure Speech for real-time transcription.
+            </p>
             <label>
-              Primary provider
-              <select value={formState.primaryProvider} onChange={(e) => updateForm('primaryProvider', e.target.value)}>
-                {ALL_SUPPORTED_PROVIDERS.map((provider) => (
-                  <option key={provider} value={provider}>
-                    {provider}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <br />
-            <label>
-              Primary transcription model
-              <select value={formState.transcriptionModel} onChange={(e) => updateForm('transcriptionModel', e.target.value)}>
-                {primaryTranscriptionModels.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <br />
-            <label>
-              Primary categorization model
-              <select value={formState.categorizationModel} onChange={(e) => updateForm('categorizationModel', e.target.value)}>
-                {primaryCategorizationModels.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </fieldset>
-
-          <fieldset>
-            <legend>Fallback provider path</legend>
-            <label>
-              Fallback provider
-              <select value={formState.fallbackProvider} onChange={(e) => updateForm('fallbackProvider', e.target.value)}>
-                <option value="">No fallback</option>
-                {ALL_SUPPORTED_PROVIDERS.map((provider) => (
-                  <option key={provider} value={provider}>
-                    {provider}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <br />
-            <label>
-              Fallback transcription model
-              <select
-                value={formState.fallbackTranscriptionModel}
-                onChange={(e) => updateForm('fallbackTranscriptionModel', e.target.value)}
-                disabled={!isSupportedProvider(formState.fallbackProvider)}
-              >
-                <option value="">Select fallback transcription model</option>
-                {fallbackTranscriptionModels.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <br />
-            <label>
-              Fallback categorization model
-              <select
-                value={formState.fallbackCategorizationModel}
-                onChange={(e) => updateForm('fallbackCategorizationModel', e.target.value)}
-                disabled={!isSupportedProvider(formState.fallbackProvider)}
-              >
-                <option value="">Select fallback categorization model</option>
-                {fallbackCategorizationModels.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
+              <input
+                type="radio"
+                name="transcriptionMode"
+                value="standard_batch"
+                checked={preferences.transcriptionMode === 'standard_batch'}
+                onChange={() => updatePreferences('transcriptionMode', 'standard_batch')}
+              />
+              {' '}Standard (offline-capable)
             </label>
             <br />
             <label>
               <input
-                type="checkbox"
-                checked={formState.fallbackOnTerminalPrimaryFailure}
-                onChange={(e) => updateForm('fallbackOnTerminalPrimaryFailure', e.target.checked)}
+                type="radio"
+                name="transcriptionMode"
+                value="live_azure"
+                checked={preferences.transcriptionMode === 'live_azure'}
+                onChange={() => updatePreferences('transcriptionMode', 'live_azure')}
               />
-              Use fallback provider on terminal primary failures
+              {' '}Live Azure transcription (online only)
             </label>
+            {preferences.transcriptionMode === 'live_azure' && (
+              <>
+                <br />
+                <label>
+                  Live transcription language
+                  <select
+                    value={preferences.liveTranscriptionLanguage}
+                    onChange={(e) => updatePreferences('liveTranscriptionLanguage', e.target.value)}
+                  >
+                    {LIVE_LANGUAGE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
+          </fieldset>
+
+          <fieldset>
+            <legend>Categorization AI routing</legend>
+            <fieldset>
+              <legend>Primary provider path</legend>
+              <label>
+                Primary provider
+                <select value={formState.primaryProvider} onChange={(e) => updateForm('primaryProvider', e.target.value)}>
+                  {ALL_SUPPORTED_PROVIDERS.map((provider) => (
+                    <option key={provider} value={provider}>
+                      {provider}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <br />
+              {preferences.transcriptionMode === 'standard_batch' && (
+                <>
+                  <label>
+                    Primary transcription model
+                    <select
+                      value={formState.transcriptionModel}
+                      onChange={(e) => updateForm('transcriptionModel', e.target.value)}
+                    >
+                      {primaryTranscriptionModels.map((model) => (
+                        <option key={model} value={model}>
+                          {model}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <br />
+                </>
+              )}
+              <label>
+                Primary categorization model
+                <select
+                  value={formState.categorizationModel}
+                  onChange={(e) => updateForm('categorizationModel', e.target.value)}
+                >
+                  {primaryCategorizationModels.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </fieldset>
+
+            <fieldset>
+              <legend>Fallback provider path</legend>
+              <label>
+                Fallback provider
+                <select
+                  value={formState.fallbackProvider}
+                  onChange={(e) => updateForm('fallbackProvider', e.target.value)}
+                >
+                  <option value="">No fallback</option>
+                  {ALL_SUPPORTED_PROVIDERS.map((provider) => (
+                    <option key={provider} value={provider}>
+                      {provider}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <br />
+              {preferences.transcriptionMode === 'standard_batch' && (
+                <>
+                  <label>
+                    Fallback transcription model
+                    <select
+                      value={formState.fallbackTranscriptionModel}
+                      onChange={(e) => updateForm('fallbackTranscriptionModel', e.target.value)}
+                      disabled={!isSupportedProvider(formState.fallbackProvider)}
+                    >
+                      <option value="">Select fallback transcription model</option>
+                      {fallbackTranscriptionModels.map((model) => (
+                        <option key={model} value={model}>
+                          {model}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <br />
+                </>
+              )}
+              <label>
+                Fallback categorization model
+                <select
+                  value={formState.fallbackCategorizationModel}
+                  onChange={(e) => updateForm('fallbackCategorizationModel', e.target.value)}
+                  disabled={!isSupportedProvider(formState.fallbackProvider)}
+                >
+                  <option value="">Select fallback categorization model</option>
+                  {fallbackCategorizationModels.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <br />
+              <label>
+                <input
+                  type="checkbox"
+                  checked={formState.fallbackOnTerminalPrimaryFailure}
+                  onChange={(e) => updateForm('fallbackOnTerminalPrimaryFailure', e.target.checked)}
+                />
+                Use fallback provider on terminal primary failures
+              </label>
+            </fieldset>
           </fieldset>
 
           <fieldset>
@@ -251,7 +341,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             ))}
           </fieldset>
 
-          <button type="submit">Save AI routing settings</button>
+          <button type="submit">Save settings</button>
         </form>
         <p>{message}</p>
       </div>

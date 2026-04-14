@@ -5,6 +5,8 @@ import {
   type SupportedProvider
 } from '@/../shared/types/model-policy';
 
+export type TranscriptionMode = 'standard_batch' | 'live_azure';
+
 export interface SettingsFormState {
   primaryProvider: string;
   transcriptionModel: string;
@@ -13,6 +15,11 @@ export interface SettingsFormState {
   fallbackTranscriptionModel: string;
   fallbackCategorizationModel: string;
   fallbackOnTerminalPrimaryFailure: boolean;
+}
+
+export interface TranscriptionPreferencesFormState {
+  transcriptionMode: TranscriptionMode;
+  liveTranscriptionLanguage: string;
 }
 
 export interface AIConfigResponse {
@@ -24,6 +31,8 @@ export interface AIConfigResponse {
   fallbackCategorizationModel: string | null;
   fallbackOnTerminalPrimaryFailure: boolean;
   providersWithKey: string[];
+  transcriptionMode: TranscriptionMode;
+  liveTranscriptionLanguage: string;
 }
 
 export const ALL_SUPPORTED_PROVIDERS = Object.keys(PROVIDER_MODEL_POLICY) as SupportedProvider[];
@@ -52,6 +61,13 @@ export function getDefaultSettingsFormState(): SettingsFormState {
   };
 }
 
+export function getDefaultTranscriptionPreferencesFormState(): TranscriptionPreferencesFormState {
+  return {
+    transcriptionMode: 'standard_batch',
+    liveTranscriptionLanguage: 'en-US'
+  };
+}
+
 export function hydrateSettingsFormState(current: SettingsFormState, response: AIConfigResponse): SettingsFormState {
   return {
     ...current,
@@ -62,6 +78,16 @@ export function hydrateSettingsFormState(current: SettingsFormState, response: A
     fallbackTranscriptionModel: response.fallbackTranscriptionModel ?? '',
     fallbackCategorizationModel: response.fallbackCategorizationModel ?? '',
     fallbackOnTerminalPrimaryFailure: response.fallbackOnTerminalPrimaryFailure
+  };
+}
+
+export function hydrateTranscriptionPreferencesFormState(
+  current: TranscriptionPreferencesFormState,
+  response: AIConfigResponse
+): TranscriptionPreferencesFormState {
+  return {
+    transcriptionMode: response.transcriptionMode ?? current.transcriptionMode,
+    liveTranscriptionLanguage: response.liveTranscriptionLanguage ?? current.liveTranscriptionLanguage
   };
 }
 
@@ -84,16 +110,25 @@ export function validateSettingsFormState(formState: SettingsFormState):
   return { ok: true, payload };
 }
 
-export function buildExecutionPathCopy(formState: SettingsFormState): string {
+export function buildExecutionPathCopy(
+  formState: SettingsFormState,
+  preferences: TranscriptionPreferencesFormState
+): string {
+  const fallbackSuffix = formState.fallbackProvider ? ` → ${formState.fallbackProvider}` : '';
+
+  if (preferences.transcriptionMode === 'live_azure') {
+    return `Recording mode: Azure live transcription (${preferences.liveTranscriptionLanguage}). Categorization path: ${formState.primaryProvider}${fallbackSuffix}.`;
+  }
+
   if (!formState.fallbackProvider) {
-    return `Active path: ${formState.primaryProvider} for transcription and categorization. No fallback path configured.`;
+    return `Recording mode: standard batch upload. Transcription + categorization path: ${formState.primaryProvider}. No fallback configured.`;
   }
 
   const terminalBehavior = formState.fallbackOnTerminalPrimaryFailure
     ? 'Fallback is enabled for retryable and terminal primary failures.'
     : 'Fallback is enabled for retryable primary failures only.';
 
-  return `Active path: primary ${formState.primaryProvider} → fallback ${formState.fallbackProvider}. ${terminalBehavior}`;
+  return `Recording mode: standard batch upload. Transcription + categorization path: ${formState.primaryProvider}${fallbackSuffix}. ${terminalBehavior}`;
 }
 
 export function buildCredentialStatusCopy(provider: string, providersWithKey: string[]): string {

@@ -5,6 +5,11 @@ import { getAIConfig, upsertAIConfig } from '@/lib/api/supabase-server';
 import { scrubSensitiveFields } from '@/lib/api/safe-logging';
 import { validateAIProviderConfig } from '@/../shared/types/model-policy';
 
+const transcriptionPreferencesSchema = z.object({
+  transcriptionMode: z.enum(['standard_batch', 'live_azure']),
+  liveTranscriptionLanguage: z.string().min(2)
+});
+
 const schema = z.object({
   primaryProvider: z.string().min(1),
   transcriptionModel: z.string().min(1),
@@ -12,7 +17,8 @@ const schema = z.object({
   fallbackProvider: z.string().optional(),
   fallbackTranscriptionModel: z.string().optional(),
   fallbackCategorizationModel: z.string().optional(),
-  fallbackOnTerminalPrimaryFailure: z.boolean().optional()
+  fallbackOnTerminalPrimaryFailure: z.boolean().optional(),
+  transcriptionPreferences: transcriptionPreferencesSchema.optional()
 });
 
 export async function PUT(request: Request) {
@@ -31,7 +37,7 @@ export async function PUT(request: Request) {
         { status: 400 }
       );
     }
-    await upsertAIConfig(userId, validated.value);
+    await upsertAIConfig(userId, validated.value, payload.transcriptionPreferences);
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {

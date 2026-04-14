@@ -47,6 +47,14 @@ Configure the Vercel app environment with this contract:
 - `R2_ENDPOINT` (optional per provider/account)
 - `PROCESSING_RETRY_DELAY_MS` (optional; defaults to 2000)
 
+### Azure Speech (optional — required for `live_azure` recording mode)
+
+- `AZURE_SPEECH_KEY` — Azure Cognitive Services subscription key. **Server-only; never expose to the browser.**
+- `AZURE_SPEECH_REGION` — Azure region for your Speech resource (e.g. `eastus`, `westeurope`).
+- `AZURE_SPEECH_ENDPOINT` — Optional. Override the endpoint if using a custom domain or private link.
+
+If these variables are absent, the Azure token route returns `AZURE_NOT_CONFIGURED` (503) and users who switch to `live_azure` mode will see an error. Standard batch mode is unaffected — it remains the default and the only offline-capable mode.
+
 ## 4) Run Database Migrations
 
 1. For a brand-new database, run `npm run db:bootstrap`.

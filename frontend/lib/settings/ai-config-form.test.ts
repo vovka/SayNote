@@ -11,6 +11,6 @@ test('settings helper supports fallback hydration, shared-policy validation, and
   assert.match(source, /validateAIProviderConfig\(payload\)/);
   assert.match(source, /key status: Stored/);
   assert.match(source, /key status: Not stored/);
-  assert.match(source, /Active path: primary/);
+  assert.match(source, /Recording mode:/);
   assert.doesNotMatch(source, /key status: .*\$\{apiKey\}/);
 });

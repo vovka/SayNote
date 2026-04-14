@@ -7,6 +7,9 @@ import { AuthControls } from '@/components/auth-controls';
 import {
   deleteCategory,
   deleteNote,
+  fetchAzureToken,
+  finalizeLiveNote,
+  getAIConfig,
   getCurrentUserId,
   getNotes,
   renameCategory,
@@ -15,6 +18,8 @@ import {
   type NoteCategoryTreeNode,
   type NoteSummary
 } from '@/lib/api/client';
+import { LiveAzureTranscriber } from '@/lib/recording/live-azure-transcriber';
+import type { TranscriptionMode } from '@/lib/settings/ai-config-form';
 import { db, type RecordingEntity } from '@/lib/db/indexeddb';
 import {
   cancelRecording,
@@ -307,10 +312,28 @@ function NotesPageContent() {
   const [dismissedSyncSuccessKeys, setDismissedSyncSuccessKeys] = useState<Set<string>>(new Set());
   const successDismissTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
+  // Live mode state
+  const [transcriptionMode, setTranscriptionMode] = useState<TranscriptionMode>('standard_batch');
+  const [liveLanguage, setLiveLanguage] = useState('en-US');
+  const [isLiveRecording, setIsLiveRecording] = useState(false);
+  const [committedTranscript, setCommittedTranscript] = useState('');
+  const [interimTranscript, setInterimTranscript] = useState('');
+  const [liveSessionError, setLiveSessionError] = useState<string | null>(null);
+  const [isFinalizingNote, setIsFinalizingNote] = useState(false);
+  const transcriberRef = useRef<LiveAzureTranscriber | null>(null);
+  const liveSessionIdRef = useRef<string | null>(null);
+  const liveStartedAtRef = useRef<string | null>(null);
+  const liveClientRecordingIdRef = useRef<string | null>(null);
+  const liveDurationStartRef = useRef<number | null>(null);
+
   useEffect(() => {
     registerServiceWorker();
     const stopSyncLoop = startSyncLoop();
     void getCurrentUserId().then(setUserId);
+    void getAIConfig().then((config) => {
+      setTranscriptionMode(config.transcriptionMode ?? 'standard_batch');
+      setLiveLanguage(config.liveTranscriptionLanguage ?? 'en-US');
+    }).catch(() => { /* use defaults */ });
 
     const flushLevel = () => {
       frameHandle.current = 0;
@@ -391,7 +414,10 @@ function NotesPageContent() {
     };
   }, []);
 
-  const buttonText = useMemo(() => (recording ? 'Stop' : 'Record'), [recording]);
+  const buttonText = useMemo(() => {
+    if (transcriptionMode === 'live_azure') return isLiveRecording ? 'Stop' : 'Record';
+    return recording ? 'Stop' : 'Record';
+  }, [isLiveRecording, recording, transcriptionMode]);
   const visualState = getRecordingVisualState(recording, level, previousVisualState.current);
   const buttonStyle = getRecordingButtonStyle(visualState, level);
 
@@ -400,11 +426,17 @@ function NotesPageContent() {
   }, [visualState]);
 
   const status = useMemo(() => {
+    if (transcriptionMode === 'live_azure') {
+      if (liveSessionError) return liveSessionError;
+      if (isFinalizingNote) return 'Saving note…';
+      if (isLiveRecording) return interimTranscript ? 'Transcribing live…' : 'Listening…';
+      return 'Ready';
+    }
     if (actionError) return actionError;
     if (recording) return 'Recording';
     if (latestRecording) return statusFromRecording(latestRecording);
     return statusHint;
-  }, [actionError, latestRecording, recording, statusHint]);
+  }, [actionError, interimTranscript, isFinalizingNote, isLiveRecording, latestRecording, liveSessionError, recording, statusHint, transcriptionMode]);
 
 
   useEffect(() => {
@@ -514,6 +546,99 @@ function NotesPageContent() {
       return;
     }
 
+    if (transcriptionMode === 'live_azure') {
+      if (!isLiveRecording) {
+        // Start live recording
+        if (!navigator.onLine) {
+          setLiveSessionError('Live transcription requires internet. Switch to Standard mode for offline recording.');
+          return;
+        }
+        setLiveSessionError(null);
+        setCommittedTranscript('');
+        setInterimTranscript('');
+        liveSessionIdRef.current = crypto.randomUUID();
+        liveClientRecordingIdRef.current = crypto.randomUUID();
+        liveStartedAtRef.current = new Date().toISOString();
+        liveDurationStartRef.current = Date.now();
+
+        const transcriber = new LiveAzureTranscriber({
+          language: liveLanguage,
+          fetchToken: fetchAzureToken,
+          callbacks: {
+            onRecognizing: (interim) => setInterimTranscript(interim),
+            onRecognized: (segment) => {
+              const trimmed = segment.trim();
+              if (!trimmed) return;
+              setCommittedTranscript((prev) => (prev ? `${prev} ${trimmed}` : trimmed));
+              setInterimTranscript('');
+            },
+            onCanceled: ({ errorDetails }) => {
+              setLiveSessionError(errorDetails ?? 'Live transcription was interrupted.');
+              setIsLiveRecording(false);
+            },
+            onSessionStopped: () => setIsLiveRecording(false)
+          }
+        });
+        transcriberRef.current = transcriber;
+        try {
+          await transcriber.start();
+          setIsLiveRecording(true);
+          setActionError(null);
+        } catch (error) {
+          transcriberRef.current = null;
+          setLiveSessionError(error instanceof Error ? error.message : 'Failed to start live transcription.');
+        }
+        return;
+      }
+
+      // Stop live recording
+      const transcriber = transcriberRef.current;
+      transcriberRef.current = null;
+      if (transcriber) await transcriber.stop();
+      setIsLiveRecording(false);
+
+      const text = committedTranscript.trim();
+      if (!text) {
+        setLiveSessionError('No speech recognized.');
+        return;
+      }
+
+      const sessionId = liveSessionIdRef.current ?? crypto.randomUUID();
+      const clientRecordingId = liveClientRecordingIdRef.current ?? crypto.randomUUID();
+      const createdAt = liveStartedAtRef.current ?? new Date().toISOString();
+      const durationMs = liveDurationStartRef.current ? Date.now() - liveDurationStartRef.current : 0;
+
+      const trySave = async () => {
+        setIsFinalizingNote(true);
+        setLiveSessionError(null);
+        try {
+          const result = await finalizeLiveNote({
+            text,
+            createdAt,
+            durationMs,
+            speechLanguage: liveLanguage,
+            clientSessionId: sessionId,
+            clientRecordingId,
+            transcriptionSource: 'azure_live'
+          });
+          const sorted = sortCategoryTreeNewestFirst(result.notesTree);
+          setHighlightedNoteIds(highlightTrackerRef.current.next(sorted));
+          setTrees(sorted);
+          setCommittedTranscript('');
+          setInterimTranscript('');
+          liveSessionIdRef.current = null;
+        } catch {
+          setLiveSessionError('Failed to save note. Tap "Retry save" to try again.');
+        } finally {
+          setIsFinalizingNote(false);
+        }
+      };
+
+      void trySave();
+      return;
+    }
+
+    // Standard batch mode
     if (!recording) {
       try {
         await startRecording();
@@ -533,9 +658,9 @@ function NotesPageContent() {
 
     setActionError(null);
     await queueRecording(userId, payload);
-  }, [recording, userId]);
+  }, [committedTranscript, isLiveRecording, liveLanguage, recording, transcriptionMode, userId]);
 
-  const isRecordingMode = visualState !== 'idle';
+  const isRecordingMode = transcriptionMode === 'live_azure' ? isLiveRecording : visualState !== 'idle';
   const closeSettings = () => {
     setIsSettingsOpen(false);
     settingsButtonRef.current?.focus();
@@ -617,7 +742,7 @@ function NotesPageContent() {
               cursor: 'pointer',
               transform: `scale(${buttonStyle.scale})`,
               transition: 'background 120ms ease, transform 80ms linear, box-shadow 120ms ease',
-              background: recording ? '#e74c3c' : '#111',
+              background: (recording || isLiveRecording) ? '#e74c3c' : '#111',
               boxShadow: `0 0 ${buttonStyle.glowRadius}px rgba(231, 76, 60, ${buttonStyle.glowOpacity})`,
               filter: `saturate(${buttonStyle.saturation}) brightness(${buttonStyle.brightness})`,
               animation: isRecordingMode ? `${pulseAnimation} ${buttonStyle.pulseDurationMs}ms ease-in-out infinite` : undefined,
@@ -667,20 +792,72 @@ function NotesPageContent() {
             ) : null}
             {buttonText}
           </button>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <strong>Quick recorder</strong>
             <p style={{ margin: '6px 0 0', opacity: 0.8 }}>{status}</p>
-            <div role="status" aria-live="polite">
-              {visibleSyncItems.filter((item) => { const v = getSyncStageVisual(item); return v.isBusy || v.stage.startsWith('failed_'); }).slice(0, 1).map((item) => {
-                const visual = getSyncStageVisual(item);
-                return (
-                  <p key={item.id} style={{ margin: '4px 0 0', opacity: 0.7, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {visual.showSpinner ? <span className="sync-spinner" aria-hidden /> : null}
-                    <span>{item.label}</span>
-                  </p>
-                );
-              })}
-            </div>
+            {transcriptionMode === 'live_azure' && (isLiveRecording || committedTranscript || liveSessionError) ? (
+              <div
+                role="status"
+                aria-live="polite"
+                style={{ margin: '6px 0 0', fontSize: 13, padding: '6px 8px', background: '#f9fafb', borderRadius: 6, border: '1px solid #e5e7eb' }}
+              >
+                {committedTranscript ? (
+                  <span>{committedTranscript}</span>
+                ) : null}
+                {interimTranscript ? (
+                  <span style={{ fontStyle: 'italic', color: '#9ca3af' }}>{committedTranscript ? ' ' : ''}{interimTranscript}</span>
+                ) : null}
+                {liveSessionError && committedTranscript ? (
+                  <button
+                    type="button"
+                    style={{ marginLeft: 8, fontSize: 12, color: '#0070f3', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                    onClick={() => {
+                      const sessionId = liveSessionIdRef.current ?? crypto.randomUUID();
+                      const clientRecordingId = liveClientRecordingIdRef.current ?? crypto.randomUUID();
+                      const createdAt = liveStartedAtRef.current ?? new Date().toISOString();
+                      const durationMs = liveDurationStartRef.current ? Date.now() - liveDurationStartRef.current : 0;
+                      setIsFinalizingNote(true);
+                      setLiveSessionError(null);
+                      finalizeLiveNote({
+                        text: committedTranscript.trim(),
+                        createdAt,
+                        durationMs,
+                        speechLanguage: liveLanguage,
+                        clientSessionId: sessionId,
+                        clientRecordingId,
+                        transcriptionSource: 'azure_live'
+                      }).then((result) => {
+                        const sorted = sortCategoryTreeNewestFirst(result.notesTree);
+                        setHighlightedNoteIds(highlightTrackerRef.current.next(sorted));
+                        setTrees(sorted);
+                        setCommittedTranscript('');
+                        setInterimTranscript('');
+                        liveSessionIdRef.current = null;
+                      }).catch(() => {
+                        setLiveSessionError('Failed to save note. Tap "Retry save" to try again.');
+                      }).finally(() => {
+                        setIsFinalizingNote(false);
+                      });
+                    }}
+                  >
+                    Retry save
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            {transcriptionMode === 'standard_batch' ? (
+              <div role="status" aria-live="polite">
+                {visibleSyncItems.filter((item) => { const v = getSyncStageVisual(item); return v.isBusy || v.stage.startsWith('failed_'); }).slice(0, 1).map((item) => {
+                  const visual = getSyncStageVisual(item);
+                  return (
+                    <p key={item.id} style={{ margin: '4px 0 0', opacity: 0.7, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {visual.showSpinner ? <span className="sync-spinner" aria-hidden /> : null}
+                      <span>{item.label}</span>
+                    </p>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
         </div>
       </section>

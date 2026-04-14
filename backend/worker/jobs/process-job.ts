@@ -1,4 +1,4 @@
-import type { PoolClient, QueryResult } from 'pg';
+import type { PoolClient } from 'pg';
 import type { CategorizeWithReviewResult } from '../../../shared/types/provider';
 import { getProvider } from '../providers/registry';
 import { resolveCategorySelection } from '../categories/resolve-category-path';
@@ -20,8 +20,14 @@ import { logWorkerEvent, logWorkerFailure, scrubSensitiveFields } from '../secur
 import { deleteTemporaryAudio, getTemporaryAudio, isR2ReadError } from '../storage/r2';
 import { cleanupTemporaryAudioAfterCompletion } from './cleanup-temporary-audio';
 import { getAttempts, shouldTryFallback, type ProcessingAttempt } from './attempt-policy';
-import { buildLockedSubtreeSet } from '../categories/locked-subtree';
 import { buildUnifiedCategorizationInput } from '../categories/build-unified-categorization-input';
+import { finalizeCategorizedNote } from './finalize-categorized-note';
+
+function validateAssignmentShape(assignment: { selectedCategoryId?: string; newCategoryPath?: string }) {
+  if (!!assignment.selectedCategoryId === !!assignment.newCategoryPath) {
+    throw new Error('Invalid unified assignment: exactly one of selectedCategoryId or newCategoryPath is required');
+  }
+}
 
 const MAX_RETRIES = Number(process.env.WORKER_MAX_RETRIES ?? 5);
 
@@ -76,73 +82,6 @@ function getFailureLogPayload(error: unknown) {
   return {};
 }
 
-function validateAssignmentShape(assignment: { selectedCategoryId?: string; newCategoryPath?: string }) {
-  if (!!assignment.selectedCategoryId === !!assignment.newCategoryPath) {
-    throw new Error('Invalid unified assignment: exactly one of selectedCategoryId or newCategoryPath is required');
-  }
-}
-
-function findReviewNote(noteId: string, reviewedNotes: ExistingNoteForReviewRow[]) {
-  return reviewedNotes.find((note) => note.id === noteId);
-}
-
-function isCategoryLocked(categoryId: string | undefined, lockedSet: Set<string>) {
-  return Boolean(categoryId && lockedSet.has(categoryId));
-}
-
-async function applyRecategorizationsBestEffort(input: {
-  client: PoolClient;
-  job: ProcessingJobRow;
-  categories: CategoryCatalogRow[];
-  reviewedNotes: ExistingNoteForReviewRow[];
-  result: CategorizeWithReviewResult;
-  deps: ProcessJobDependencies;
-}) {
-  const lockedSet = buildLockedSubtreeSet(
-    input.categories.map((category) => ({ id: category.id, parent_id: category.parent_id, is_locked: category.is_locked }))
-  );
-
-  for (const recategorization of input.result.recategorizations) {
-    try {
-      const reviewNote = findReviewNote(recategorization.noteId, input.reviewedNotes);
-      if (!reviewNote || reviewNote.is_in_locked_subtree) {
-        continue;
-      }
-
-      validateAssignmentShape(recategorization);
-
-      const targetCategoryId = await input.deps.resolveCategorySelection(input.client, {
-        userId: input.job.user_id,
-        selectedCategoryId: recategorization.selectedCategoryId,
-        newCategoryPath: recategorization.newCategoryPath
-      });
-
-      if (targetCategoryId === reviewNote.current_category_id) {
-        continue;
-      }
-
-      if (isCategoryLocked(targetCategoryId, lockedSet)) {
-        continue;
-      }
-
-      await input.deps.applyRecategorization(input.client, {
-        noteId: reviewNote.id,
-        userId: input.job.user_id,
-        targetCategoryId,
-        sourceJobId: input.job.id,
-        confidence: recategorization.confidence,
-        reason: recategorization.reason
-      });
-    } catch (error) {
-      logWorkerFailure({
-        jobId: input.job.id,
-        userId: input.job.user_id,
-        errorCode: 'AUTO_RECATEGORIZATION_FAILED',
-        error
-      });
-    }
-  }
-}
 
 export async function processJob(
   client: PoolClient,
@@ -280,92 +219,22 @@ export async function processJob(
       throw lastFailure ?? new Error('Failed to process job');
     }
 
-    let insertedNewNote = false;
-
-    await client.query('begin');
-    try {
-      const existingNote: QueryResult<{ id: string }> = await client.query(
-        'select id from notes where source_job_id = $1 limit 1',
-        [job.id]
-      );
-
-      if (!existingNote.rowCount) {
-        const categoryId = await deps.resolveCategorySelection(client, {
-          userId: job.user_id,
-          selectedCategoryId: categorization.newNoteAssignment.selectedCategoryId,
-          newCategoryPath: categorization.newNoteAssignment.newCategoryPath
-        });
-
-        await client.query(
-          `insert into notes (user_id, category_id, source_job_id, text, created_at, processed_at, updated_at, metadata)
-           values ($1, $2, $3, $4, $5::timestamptz, now(), now(), $6::jsonb)`,
-          [
-            job.user_id,
-            categoryId,
-            job.id,
-            transcriptionText,
-            job.client_created_at,
-            JSON.stringify({
-              provider: completedAttempt.provider,
-              assignmentMode: 'initial',
-              sourceJobId: job.id,
-              clientRecordingId: job.client_recording_id,
-              assignedCategoryPath: categorization.newNoteAssignment.newCategoryPath ?? null,
-              assignmentConfidence: categorization.newNoteAssignment.confidence ?? null,
-              assignmentReason: categorization.newNoteAssignment.reason ?? null
-            })
-          ]
-        );
-        insertedNewNote = true;
+    await finalizeCategorizedNote(client, {
+      job,
+      transcriptionText,
+      categorization,
+      categories,
+      reviewedNotes,
+      nextCursorAfterNoteId,
+      completedAttempt,
+      source: 'batch',
+      deps: {
+        resolveCategorySelection: deps.resolveCategorySelection,
+        applyRecategorization: deps.applyRecategorization,
+        saveReviewCursor: deps.saveReviewCursor,
+        logWorkerFailure: deps.logWorkerFailure
       }
-
-      await client.query(
-        `update processing_jobs
-         set status = 'completed',
-             provider_used = $2,
-             transcription_model = $3,
-             categorization_model = $4,
-             completed_at = now(),
-             updated_at = now(),
-             error_code = null,
-             error_message_safe = null
-         where id = $1`,
-        [job.id, completedAttempt.provider, completedAttempt.transcriptionModel, completedAttempt.categorizationModel]
-      );
-
-      await client.query('commit');
-    } catch (error) {
-      await client.query('rollback');
-      throw error;
-    }
-
-    if (insertedNewNote) {
-      try {
-        await client.query('begin');
-        await applyRecategorizationsBestEffort({
-          client,
-          job,
-          categories,
-          reviewedNotes,
-          result: categorization,
-          deps
-        });
-
-        if (nextCursorAfterNoteId !== null) {
-          await deps.saveReviewCursor(client, job.user_id, nextCursorAfterNoteId);
-        }
-
-        await client.query('commit');
-      } catch (error) {
-        await client.query('rollback');
-        logWorkerFailure({
-          jobId: job.id,
-          userId: job.user_id,
-          errorCode: 'POST_INSERT_REVIEW_FAILED',
-          error
-        });
-      }
-    }
+    });
 
     await deps.cleanupTemporaryAudioAfterCompletion({
       jobId: job.id,
