@@ -365,22 +365,25 @@ export async function getJobForUser(jobId: string, userId: string) {
 
 export async function upsertAIConfig(
   userId: string,
-  config: ValidatedAIProviderConfig
+  config: ValidatedAIProviderConfig,
+  transcriptionPreferences?: { transcriptionMode: string; liveTranscriptionLanguage: string }
 ) {
   const supabase = getSupabase();
-  const { error } = await supabase.from('user_ai_config').upsert(
-    {
-      user_id: userId,
-      primary_provider: config.primaryProvider,
-      transcription_model: config.transcriptionModel,
-      categorization_model: config.categorizationModel,
-      fallback_provider: config.fallbackProvider ?? null,
-      fallback_transcription_model: config.fallbackTranscriptionModel ?? null,
-      fallback_categorization_model: config.fallbackCategorizationModel ?? null,
-      fallback_on_terminal_primary_failure: config.fallbackOnTerminalPrimaryFailure
-    },
-    { onConflict: 'user_id' }
-  );
+  const row: Record<string, unknown> = {
+    user_id: userId,
+    primary_provider: config.primaryProvider,
+    transcription_model: config.transcriptionModel,
+    categorization_model: config.categorizationModel,
+    fallback_provider: config.fallbackProvider ?? null,
+    fallback_transcription_model: config.fallbackTranscriptionModel ?? null,
+    fallback_categorization_model: config.fallbackCategorizationModel ?? null,
+    fallback_on_terminal_primary_failure: config.fallbackOnTerminalPrimaryFailure
+  };
+  if (transcriptionPreferences) {
+    row.transcription_mode = transcriptionPreferences.transcriptionMode;
+    row.live_transcription_language = transcriptionPreferences.liveTranscriptionLanguage;
+  }
+  const { error } = await supabase.from('user_ai_config').upsert(row, { onConflict: 'user_id' });
   if (error) throw error;
 }
 
@@ -390,7 +393,7 @@ export async function getAIConfig(userId: string) {
   const [configResult, credsResult] = await Promise.all([
     supabase
       .from('user_ai_config')
-      .select('primary_provider,transcription_model,categorization_model,fallback_provider,fallback_transcription_model,fallback_categorization_model,fallback_on_terminal_primary_failure')
+      .select('primary_provider,transcription_model,categorization_model,fallback_provider,fallback_transcription_model,fallback_categorization_model,fallback_on_terminal_primary_failure,transcription_mode,live_transcription_language')
       .eq('user_id', userId)
       .maybeSingle(),
     supabase.from('user_ai_credentials').select('provider').eq('user_id', userId)
@@ -399,16 +402,18 @@ export async function getAIConfig(userId: string) {
   if (configResult.error) throw configResult.error;
   if (credsResult.error) throw credsResult.error;
 
-  const config = configResult.data;
+  const config = configResult.data as Record<string, unknown> | null;
   return {
-    primaryProvider: config?.primary_provider ?? null,
-    transcriptionModel: config?.transcription_model ?? null,
-    categorizationModel: config?.categorization_model ?? null,
-    fallbackProvider: config?.fallback_provider ?? null,
-    fallbackTranscriptionModel: config?.fallback_transcription_model ?? null,
-    fallbackCategorizationModel: config?.fallback_categorization_model ?? null,
-    fallbackOnTerminalPrimaryFailure: config?.fallback_on_terminal_primary_failure ?? false,
-    providersWithKey: (credsResult.data ?? []).map((row) => row.provider)
+    primaryProvider: (config?.primary_provider as string | null) ?? null,
+    transcriptionModel: (config?.transcription_model as string | null) ?? null,
+    categorizationModel: (config?.categorization_model as string | null) ?? null,
+    fallbackProvider: (config?.fallback_provider as string | null) ?? null,
+    fallbackTranscriptionModel: (config?.fallback_transcription_model as string | null) ?? null,
+    fallbackCategorizationModel: (config?.fallback_categorization_model as string | null) ?? null,
+    fallbackOnTerminalPrimaryFailure: (config?.fallback_on_terminal_primary_failure as boolean | null) ?? false,
+    providersWithKey: (credsResult.data ?? []).map((row) => row.provider),
+    transcriptionMode: ((config?.transcription_mode as string | null) ?? 'standard_batch') as 'standard_batch' | 'live_azure',
+    liveTranscriptionLanguage: (config?.live_transcription_language as string | null) ?? 'en-US'
   };
 }
 

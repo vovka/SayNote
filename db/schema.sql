@@ -82,6 +82,8 @@ create table if not exists user_ai_config (
   fallback_transcription_model text,
   fallback_categorization_model text,
   fallback_on_terminal_primary_failure boolean not null default false,
+  transcription_mode text not null default 'standard_batch' check (transcription_mode in ('standard_batch', 'live_azure')),
+  live_transcription_language text not null default 'en-US',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

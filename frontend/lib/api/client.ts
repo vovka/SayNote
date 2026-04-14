@@ -121,11 +121,14 @@ export async function getAIConfig() {
   return response.json() as Promise<AIConfigResponse>;
 }
 
-export async function putAIConfig(input: AIProviderConfigInput) {
+export async function putAIConfig(
+  input: AIProviderConfigInput,
+  transcriptionPreferences?: { transcriptionMode: string; liveTranscriptionLanguage: string }
+) {
   const response = await authFetch('/api/settings/ai-config', {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(input)
+    body: JSON.stringify({ ...input, transcriptionPreferences })
   });
   if (!response.ok) throw new Error('Failed to save AI config');
 }
@@ -137,6 +140,36 @@ export async function putAICredentials(input: { provider: string; apiKey: string
     body: JSON.stringify(input)
   });
   if (!response.ok) throw new Error('Failed to save credentials');
+}
+
+export async function fetchAzureToken() {
+  const response = await authFetch('/api/speech/azure-token', { cache: 'no-store' });
+  if (!response.ok) throw new Error('Failed to fetch Azure Speech token');
+  return response.json() as Promise<{ token: string; region: string; expiresAt: string }>;
+}
+
+export async function finalizeLiveNote(payload: {
+  text: string;
+  createdAt: string;
+  durationMs: number;
+  speechLanguage: string;
+  clientSessionId: string;
+  clientRecordingId: string;
+  transcriptionSource: 'azure_live';
+}) {
+  const response = await authFetch('/api/notes/live', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { errorCode?: string };
+    throw Object.assign(new Error('Failed to finalize live note'), { errorCode: body.errorCode });
+  }
+  return response.json() as Promise<{
+    note: { id: string; jobId: string };
+    notesTree: NoteCategoryTreeNode[];
+  }>;
 }
 
 export async function getCurrentUserId() {

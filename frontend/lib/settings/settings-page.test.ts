@@ -14,6 +14,6 @@ test('settings modal keeps provider key inputs write-only', async () => {
 test('settings modal reports network failures during save operations', async () => {
   const source = await readFile(new URL('../../components/settings-modal.tsx', import.meta.url), 'utf8');
 
-  assert.match(source, /setMessage\('Failed to save AI settings'\)/);
+  assert.match(source, /setMessage\('Failed to save settings'\)/);
   assert.match(source, /setMessage\(`Failed to store \$\{provider\} key`\)/);
 });

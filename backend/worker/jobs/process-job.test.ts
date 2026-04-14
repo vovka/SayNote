@@ -2,25 +2,32 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-test('process-job note insert uses original recording timestamp and distinct processing timestamp', async () => {
+test('process-job delegates note insert and recategorization to finalizeCategorizedNote', async () => {
   const source = await readFile(new URL('./process-job.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /finalizeCategorizedNote/);
+  assert.match(source, /source: 'batch'/);
+  assert.match(source, /adapter\.categorizeWithReview\(/);
+});
+
+test('finalize-categorized-note uses original recording timestamp and distinct processing timestamp', async () => {
+  const source = await readFile(new URL('./finalize-categorized-note.ts', import.meta.url), 'utf8');
 
   assert.match(
     source,
     /insert into notes \(user_id, category_id, source_job_id, text, created_at, processed_at, updated_at, metadata\)[\s\S]*values \(\$1, \$2, \$3, \$4, \$5::timestamptz, now\(\), now\(\), \$6::jsonb\)/
   );
-  assert.match(source, /job\.client_created_at/);
-  assert.match(source, /clientRecordingId: job\.client_recording_id/);
+  assert.match(source, /input\.job\.client_created_at/);
+  assert.match(source, /clientRecordingId: input\.job\.client_recording_id/);
   assert.doesNotMatch(
     source,
     /values \(\$1, \$2, \$3, \$4, \$5::timestamptz, \$5::timestamptz, now\(\), \$6::jsonb\)/
   );
 });
 
-test('process-job uses unified categorizeWithReview call and isolates post-insert recategorization failures', async () => {
-  const source = await readFile(new URL('./process-job.ts', import.meta.url), 'utf8');
+test('finalize-categorized-note uses unified categorizeWithReview and isolates post-insert recategorization failures', async () => {
+  const source = await readFile(new URL('./finalize-categorized-note.ts', import.meta.url), 'utf8');
 
-  assert.match(source, /adapter\.categorizeWithReview\(/);
   assert.match(source, /applyRecategorizationsBestEffort/);
   assert.match(
     source,

@@ -177,3 +177,41 @@ sequenceDiagram
     API-->>UI: [{category, notes, children}]
     UI->>User: Display categorized note (highlighted)
 ```
+
+## Recording Modes
+
+SayNote supports two mutually exclusive recording modes selected in Settings.
+
+### Standard Batch (default, offline-capable)
+
+```
+MediaRecorder → IndexedDB (queued_upload)
+  → Sync Manager → POST /api/audio/upload → R2 (temp audio)
+  → Vercel Workflow → Worker (pg pool)
+      → STT (Groq/OpenRouter)
+      → Categorization AI
+      → INSERT notes (Supabase)
+      → DELETE temp audio (R2)
+Browser polls GET /api/jobs/:id → on completed: GET /api/notes → display
+```
+
+Works offline. Notes are queued locally and processed when online.
+
+### Azure Live (online-only)
+
+```
+Browser → GET /api/speech/azure-token → Vercel (issues short-lived JWT, never exposes key)
+Browser → Azure Speech WSS (continuous recognition, browser-held session)
+  ← recognizing events (interim text, displayed as in-progress tail)
+  ← recognized events (final segments, appended to committed transcript)
+User presses Stop:
+Browser → POST /api/notes/live → Vercel (finalizeTextNote via pg pool)
+  → Categorization AI (Groq/OpenRouter, primary provider only)
+  → INSERT processing_jobs (status=completed, audio_storage_key=null)
+  → INSERT notes
+  → Returns notesTree inline → browser updates display
+```
+
+**Not used in live mode:** R2, IndexedDB, Sync Manager, `/api/audio/upload`, Vercel Workflows, worker transcription.
+
+The browser owns the Azure Speech WebSocket session for the duration of the recording. Vercel functions handle only token issuance (stateless GET) and note finalization (stateless POST). This matches Vercel's serverless guidance for realtime: keep the long-lived connection client-side.

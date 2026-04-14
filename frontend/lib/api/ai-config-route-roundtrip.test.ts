@@ -15,6 +15,6 @@ test('ai-config route and storage include fallback fields + provider key presenc
   assert.match(serverSource, /fallback_transcription_model: config\.fallbackTranscriptionModel \?\? null/);
   assert.match(serverSource, /fallback_categorization_model: config\.fallbackCategorizationModel \?\? null/);
   assert.match(serverSource, /fallback_on_terminal_primary_failure: config\.fallbackOnTerminalPrimaryFailure/);
-  assert.match(serverSource, /config\?\.fallback_on_terminal_primary_failure \?\? false/);
+  assert.match(serverSource, /fallback_on_terminal_primary_failure.*\?\? false/);
   assert.match(serverSource, /providersWithKey: \(credsResult\.data \?\? \[\]\)\.map\(\(row\) => row\.provider\)/);
 });
